@@ -78,7 +78,7 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
   )
 }
 
-#* Return EJAM analysis data as JSON
+#* Return EJAM analysis data as JSON based on geography
 #* @param sites A data frame of site coordinates (lat/lon)
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
@@ -124,9 +124,9 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
   }
 }
 
-#* Return EJAM analysis based on query
-#* @param attribute An EJSCREEN attribute, in EJAM syntax
-#* @param value A cutoff decimal, 0-1, for returning blockgroups whose values match the attribute
+#* Return EJAM analysis data as JSON based on attribute query
+#* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
+#* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
 #* @post /query
 function(attribute = "pctunemployed", value=.9, res) {
     these <- pctile_x_is_hit_by_score(attribute, cutoff = value)
@@ -187,11 +187,11 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
   } 
   
   if (ext == "pdf") {
-    # If report_output is a file path, we must read it as RAW binary
+    # If report_output is a file path, we read it as RAW binary
     if (is.character(report_output) && file.exists(report_output)) {
       
       res$setHeader("Content-Type", "application/pdf")
-      res$setHeader("Content-Disposition", "inline; filename=report.pdf")
+      res$setHeader("Content-Disposition", "inline; filename=ejscreen_report.pdf")
       
       # Read the file as raw binary data to avoid 'embedded nul' issues
       file_size <- file.info(report_output)$size
