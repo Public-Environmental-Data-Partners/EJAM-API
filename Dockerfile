@@ -1,110 +1,79 @@
 # Written with assistance from Google Gemini
 
 # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
-# This is an LTS release with a mature and complete CRAN binary repository
 FROM ubuntu:22.04
 
 # Set DEBIAN_FRONTEND to noninteractive to avoid prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update apt cache and install user-requested libraries + R dependencies
+# Install System Dependencies, Pandoc, Git LFS, and Google Chrome
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    # --- R dependencies ---
-    software-properties-common \
-    wget \
-    gnupg \
-    unzip \
-    ca-certificates \
-    locales \
-    # --- EJAM-required libraries ---
-    libudunits2-dev \
-    libmysqlclient-dev \
-    libcurl4-openssl-dev \
-    libsodium-dev \
-    libgdal-dev \
-    libgeos-dev \
-    libproj-dev \
-    libssl-dev \
-    libxml2-dev \
-    zlib1g-dev \
-    libjq-dev \
-    libprotobuf-dev \
-    protobuf-compiler \
-    cmake \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    libtiff5-dev \
-    libjpeg-dev \
-    libwebp-dev \
-    libharfbuzz-dev \
-    libfribidi-dev && \
-    # Clean up apt cache
+    software-properties-common wget unzip gnupg ca-certificates locales \
+    pandoc git git-lfs \
+    libudunits2-dev libmysqlclient-dev libcurl4-openssl-dev libsodium-dev \
+    libgdal-dev libgeos-dev libproj-dev libssl-dev libxml2-dev zlib1g-dev \
+    libjq-dev libprotobuf-dev protobuf-compiler cmake libfontconfig1-dev \
+    libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libwebp-dev \
+    libharfbuzz-dev libfribidi-dev libgit2-dev libssh2-1-dev && \
+    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    apt-get install -y --no-install-recommends ./google-chrome-stable_current_amd64.deb && \
+    rm ./google-chrome-stable_current_amd64.deb && \
+    git lfs install && \
     rm -rf /var/lib/apt/lists/*
 
 # Configure locale to support UTF-8
-RUN locale-gen en_US.UTF-8 && \
-    update-locale LANG=en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
+RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
-# Add the CRAN repository for R 4.x
+# Add CRAN repo for R 4.x
 RUN wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
-    # Add the R 4.0+ repository for Ubuntu 22.04 (Jammy)
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/"
 
-# Update apt cache again to include the new CRAN repository
-# Then install the specific R 4.5 version AND some memory-intensive dependencies
+# Install R
 RUN apt-get update && \
-    apt-get install -y \
-    # --- R Base ---
-    r-base=4.5.* \
-    r-base-dev=4.5.* \
-    # --- Pre-compiled R packages in this repo ---
-    r-cran-sf \
-    r-cran-data.table \
-    r-cran-rcpp \
-    r-cran-cpp11 \
-    r-cran-remotes \
-    r-cran-plumber \
-    r-cran-shiny \
-    r-cran-testthat \
-    r-cran-jsonlite \
-    r-cran-rlang \
-    r-cran-r6 \
-    r-cran-promises \
-    r-cran-httpuv \
-    && \
-    # Clean up apt cache
+    apt-get install -y r-base r-base-dev r-recommended && \
     rm -rf /var/lib/apt/lists/*
 
-# Download 'EJAM' and install its remaining dependencies from binary repos
-RUN \
-    # Get EJAM R package (v2.32.7)
-    wget -c https://github.com/ejanalysis/EJAM/archive/refs/tags/v2.32.7.tar.gz -O - | tar -xz && \
-    \
-    # Install remaining dependencies from RStudio's binary repo
-    # This includes packages like 'shinytest2' and 'webshot' that were not in apt
-    # Then, install EJAM itself.
-    # We use MAKEFLAGS="-j1" to force single-core compilation, saving memory.
-    MAKEFLAGS="-j1" R -e " \
-        install.packages(c('shinytest2', 'webshot'), repos=c('https://packagemanager.rstudio.com/all/__linux__/jammy/latest')); \
-        remotes::install_local('/EJAM-2.32.7', dependencies=TRUE, upgrade='always', build=FALSE, repos=c('https://packagemanager.rstudio.com/all/__linux__/jammy/latest'), INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')) \
-    " && \
-    \
-    # Clean up the downloaded source directory
-    rm -rf /EJAM-2.32.7
+# Create a Chrome Wrapper Script
+# pagedown ignores CHROMOTE_EXTRA_ARGS, so Chrome crashes immediately in Docker without sandboxing.
+# This wrapper intercepts calls to Chrome and forces the required Docker flags on every execution.
+RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable-dev-shm-usage "$@"' > /usr/local/bin/google-chrome && \
+    chmod +x /usr/local/bin/google-chrome && \
+    echo 'CHROMOTE_CHROME=/usr/local/bin/google-chrome' >> /etc/R/Renviron.site
 
-# Set the environment back to default
+# Clone EJAM
+RUN git clone --branch v2.32.8.1 --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM-2.32.8.1 && \
+    cd /EJAM-2.32.8.1 && \
+    git lfs pull
+
+# Install Dependencies & EJAM
+RUN MAKEFLAGS="-j$(nproc)" R -e " \
+    options(HTTPUserAgent = sprintf('R/%s R (%s)', getRversion(), paste(getRversion(), R.version\$platform, R.version\$arch, R.version\$os))); \
+    \
+    # Use 'latest' to get pre-compiled binaries \
+    options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest')); \
+    \
+    # Pre-install key dependencies first \
+    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr')); \
+    \
+    # Install a fixed fork of AOI \
+    remotes::install_github('ericnost/AOI', upgrade='never'); \
+    \
+    # Install EJAM using upgrade='never' so it doesn't break the stable environment \
+    remotes::install_local('/EJAM-2.32.8.1', dependencies=TRUE, upgrade='never', build=FALSE, INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')); \
+    \
+    # Verify installation \
+    if (!('EJAM' %in% installed.packages()[, 'Package'])) stop('EJAM FAILED TO INSTALL!'); \
+    " && \
+    # Clean up the cloned source directory \
+    rm -rf /EJAM-2.32.8.1
+
+# Reset frontend
 ENV DEBIAN_FRONTEND=dialog
 
-# Copy into the container
+# Application setup
 COPY / /
-
-# Open port 8080 to traffic
 EXPOSE 8080
-
-# When the container starts, start the main.R script
 ENTRYPOINT ["Rscript", "main.r"]

@@ -78,7 +78,7 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
   )
 }
 
-#* Return EJAM analysis data as JSON
+#* Return EJAM analysis data as JSON based on geography
 #* @param sites A data frame of site coordinates (lat/lon)
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
@@ -124,15 +124,27 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
   }
 }
 
-#* Generate an EJAM report in HTML format
+#* Return EJAM analysis data as JSON based on attribute query
+#* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
+#* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
+#* @post /query
+function(attribute = "pctunemployed", value=.9, res) {
+    these <- pctile_x_is_hit_by_score(attribute, cutoff = value)
+    results <- blockgroupstats[these,]
+    return (results)
+}
+
+#* Generate an EJAM report
 #* @param lat Latitude of the site
 #* @param lon Longitude of the site
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
+#* @param sitenumber Which site, in a multi-site analysis, to run a report for. Defaults to 1.
+#* @param fileextension Whether to return a PDF or HTML file. Defaults to PDF.
+#* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
-#* @serializer html
-function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, res) {
+function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumber=1, fileextension="pdf", res) {
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
   area <- if (method == "latlon") data.frame(lat = as.numeric(lat), lon = as.numeric(lon)) else shape %||% fips
@@ -163,9 +175,39 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, res) {
     to_map$ejam_uniq_id <- 1 # Might run into issues here for multisite reports
   }
 
-  # Generate and return the HTML report.
-  ejam2report(result, sitenumber = 1, return_html = TRUE, launch_browser = FALSE, site_method = method, shp=to_map,
-    report_title="EJSCREEN Community Report")
+  # Generate and return the report.
+  ext <- tolower(fileextension)
+  report_output <- ejam2report(result, sitenumber = sitenumber, return_html = (ext == "html"), launch_browser = FALSE, site_method = method, shp=to_map,
+    report_title="EJSCREEN Community Report", fileextension=ext)
+
+  if (ext == "html") {
+    res$setHeader("Content-Type", "text/html")
+    res$body <- report_output
+    return(res)
+  } 
+  
+  if (ext == "pdf") {
+    # If report_output is a file path, we read it as RAW binary
+    if (is.character(report_output) && file.exists(report_output)) {
+      
+      res$setHeader("Content-Type", "application/pdf")
+      res$setHeader("Content-Disposition", "inline; filename=ejscreen_report.pdf")
+      
+      # Read the file as raw binary data to avoid 'embedded nul' issues
+      file_size <- file.info(report_output)$size
+      res$body <- readBin(report_output, "raw", n = file_size)
+      
+      # Clean up the temp file after reading it into memory
+      on.exit(unlink(report_output), add = TRUE)
+      
+      return(res)
+    } else {
+      # If ejam2report already returned raw bytes, just pass them through
+      res$setHeader("Content-Type", "application/pdf")
+      res$body <- report_output
+      return(res)
+    }
+  }
 }
 
 #* Serve static assets from the ./assets directory
