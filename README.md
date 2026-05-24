@@ -6,7 +6,7 @@ In February 2025, USEPA removed its EJSCREEN website from public access, includi
 Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently provide an API; this repo contains files necessary to create a Docker image of EJAM and its dependencies as well as an API model.
 
 # Model
-There are currently two endpoints for the API.
+There are currently three endpoints for the API.
 
 ## Reports
 `report` accepts GET requests with the following parameters:
@@ -60,6 +60,28 @@ response = requests.post(url, json=data)
 
 # Load response as Pandas dataframe
 df = pandas.DataFrame.from_dict(response.json())
+df
+```
+
+## Query
+`query` accepts POST requests with the following parameters:
+- `attribute` - an EJSCREEN attribute in EJAM syntax, such as `pctlowinc` or `pctunemployed`
+- `value` - a decimal cutoff from 0 to 1
+
+`query` returns a JSON object of EJAM output. Responses are limited to 100 rows per request. If the limit is reached, the response includes a `message` and a `results` field containing the first 100 rows.
+
+### Examples
+```
+data = {"attribute": "pctlowinc", "value": 0.95}
+
+# Execute query
+import requests
+url = "https://ejamapi-84652557241.us-central1.run.app/query"
+response = requests.post(url, json=data)
+
+# Load response as Pandas dataframe
+payload = response.json()
+df = pandas.DataFrame.from_dict(payload["results"] if isinstance(payload, dict) and "results" in payload else payload)
 df
 ```
 
