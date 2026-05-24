@@ -125,12 +125,30 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
 }
 
 #* Return EJAM analysis data as JSON based on attribute query
+#* Query responses are limited to 100 rows per request. If the limit is reached,
+#* the response includes a message and the first 100 rows.
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
 #* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
 #* @post /query
 function(attribute = "pctunemployed", value=.9, res) {
+    value <- suppressWarnings(as.numeric(value))
+    if (length(value) != 1 || is.na(value) || value < 0 || value > 1) {
+      res$status <- 400
+      return(handle_error("value must be a numeric cutoff from 0 to 1."))
+    }
     these <- pctile_x_is_hit_by_score(attribute, cutoff = value)
     results <- blockgroupstats[these,]
+    query_limit <- 100L
+    if (nrow(results) > query_limit) {
+      message <- sprintf(
+        "Query returned %d rows; response limited to the first %d rows.",
+        nrow(results), query_limit
+      )
+      return(list(
+        message = message,
+        results = results[seq_len(query_limit), ]
+      ))
+    }
     return (results)
 }
 
