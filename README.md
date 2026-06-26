@@ -31,6 +31,21 @@ A multisite report over two counties: https://ejamapi-84652557241.us-central1.ru
 
 A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652557241.us-central1.run.app/report?shape=%7B"type"%3A"FeatureCollection"%2C"features"%3A%5B%7B"type"%3A"Feature"%2C"properties"%3A%7B%7D%2C"geometry"%3A%7B"coordinates"%3A%5B%5B%5B-112.01991856401462%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.51124624304089%5D%5D%5D%2C"type"%3A"Polygon"%7D%7D%5D%7D&buffer=0
 
+### Multisite report via POST
+
+`report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large/mixed site sets) that would not fit in a GET URL. It uses the same report engine and accepts the same body as `data` (`sites`, `shape`, `fips`, `buffer`, `scale`), plus:
+- `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site.
+- `fileextension` - `html` (default) or `pdf`.
+
+Each `fips` code is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
+
+```
+# A multisite report over several drawn polygons
+import json, requests
+payload = {"shape": json.dumps(feature_collection), "buffer": 0, "sitenumber": 0, "fileextension": "html"}
+html = requests.post("https://ejamapi-84652557241.us-central1.run.app/report", json=payload).text
+```
+
 ## Data
 `data` accepts POST requests with the following parameters:
 - `sites` - a list of lat/lon pairs e.g. `[{"lat":33, "lon":-112}, {"lat":34, "lon":-114}]`

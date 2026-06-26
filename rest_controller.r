@@ -159,6 +159,35 @@ function(attribute = "pctunemployed", value=.9, res) {
   return (results)
 }
 
+# Render an ejamit() result as an EJAM report and write it to the plumber
+# response as HTML or PDF. Shared by GET /report (one value per param) and
+# POST /report (JSON body; supports many/large polygons and mixed/large sets).
+# report_title is intentionally left unset so ejam2report() picks the correct
+# header by sitenumber ("EJSCREEN Community Report" vs "EJSCREEN Multisite Summary").
+report_response <- function(result, method, to_map, sitenum, ext, res) {
+  report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
+    launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+
+  if (ext == "html") {
+    res$setHeader("Content-Type", "text/html")
+    res$body <- report_output
+    return(res)
+  }
+
+  # PDF (default). ejam2report() returns a file path or raw bytes.
+  if (is.character(report_output) && file.exists(report_output)) {
+    res$setHeader("Content-Type", "application/pdf")
+    res$setHeader("Content-Disposition", "inline; filename=ejscreen_report.pdf")
+    file_size <- file.info(report_output)$size
+    res$body <- readBin(report_output, "raw", n = file_size)
+    on.exit(unlink(report_output), add = TRUE)
+    return(res)
+  }
+  res$setHeader("Content-Type", "application/pdf")
+  res$body <- report_output
+  res
+}
+
 #* Generate an EJAM report
 #* @param lat Latitude of the site
 #* @param lon Longitude of the site
@@ -219,43 +248,54 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
     to_map$ejam_uniq_id <- seq_len(nrow(to_map)) # one id per feature (multisite-safe)
   }
 
-  # Generate and return the report. Leave report_title unset so ejam2report()
-  # chooses the correct header itself based on sitenumber: the EJAM defaults are
-  # "EJSCREEN Community Report" for a single site and "EJSCREEN Multisite Summary"
-  # for the aggregate (sitenumber = 0). See ejam2report()'s report_title /
-  # report_title_multisite handling.
-  ext <- tolower(fileextension)
-  report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"), launch_browser = FALSE, site_method = method, shp=to_map,
-    fileextension=ext)
+  # Generate and return the report (HTML or PDF). See report_response() above.
+  report_response(result, method, to_map, sitenum, tolower(fileextension), res)
+}
 
-  if (ext == "html") {
-    res$setHeader("Content-Type", "text/html")
-    res$body <- report_output
-    return(res)
-  } 
-  
-  if (ext == "pdf") {
-    # If report_output is a file path, we read it as RAW binary
-    if (is.character(report_output) && file.exists(report_output)) {
-      
-      res$setHeader("Content-Type", "application/pdf")
-      res$setHeader("Content-Disposition", "inline; filename=ejscreen_report.pdf")
-      
-      # Read the file as raw binary data to avoid 'embedded nul' issues
-      file_size <- file.info(report_output)$size
-      res$body <- readBin(report_output, "raw", n = file_size)
-      
-      # Clean up the temp file after reading it into memory
-      on.exit(unlink(report_output), add = TRUE)
-      
-      return(res)
-    } else {
-      # If ejam2report already returned raw bytes, just pass them through
-      res$setHeader("Content-Type", "application/pdf")
-      res$body <- report_output
-      return(res)
-    }
+#* Generate an EJAM report from a POST body (supports many/large polygons and mixed/large site sets).
+#* Same report engine as GET /report, but inputs travel in the request body so there is no URL-length limit.
+#* @param sites An array of {lat, lon} site objects
+#* @param shape A GeoJSON FeatureCollection string (one or more polygons)
+#* @param fips An array of FIPS codes (each one a separate site)
+#* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
+#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
+#* @param fileextension "html" (default) or "pdf"
+#* @param scale For FIPS requests, the unit (blockgroup or county)
+#* @serializer contentType list(type = "application/octet-stream")
+#* @post /report
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, sitenumber = 0, fileextension = "html", scale = NULL, res) {
+  # One method per analysis; auto-detected from which input is present.
+  method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
+  area <- sites %||% shape %||% fips
+
+  if (is.null(method) || is.null(area)) {
+    res$status <- 400
+    return(handle_error("You must provide sites, a shape, or fips.", "html"))
   }
+
+  # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site.
+  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
+  if (is.na(sitenum)) sitenum <- 0
+
+  result <- tryCatch(
+    ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), scale = scale, endpoint = "report"),
+    error = function(e) {
+      res$status <- 400
+      handle_error(e$message, "html")
+    }
+  )
+  if (is.character(result)) {
+    return(result)
+  }
+
+  # Submitted polygon(s) to appear in the report map.
+  to_map <- NULL
+  if (method == "SHP") {
+    to_map <- geojson_sf(area)
+    to_map$ejam_uniq_id <- seq_len(nrow(to_map))
+  }
+
+  report_response(result, method, to_map, sitenum, tolower(fileextension), res)
 }
 
 # ---- Site handoff (token-based) for launching the EJAM app pre-loaded ----
