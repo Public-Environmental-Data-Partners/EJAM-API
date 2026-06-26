@@ -206,12 +206,20 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
   # each. Splitting here lets the same endpoint serve single-site (one value)
   # and multisite (several values) requests. Each FIPS code is a separate site
   # (no fipper() expansion), so a list of counties reports as a list of counties.
+  # Parse + validate lat/lon up front so mismatched counts fail cleanly (a 400)
+  # instead of silently recycling (e.g. lat=33 & lon=-112,-114) or erroring 500.
+  latv <- NULL; lonv <- NULL
+  if (identical(method, "latlon")) {
+    latv <- as.numeric(trimws(strsplit(paste(lat, collapse = ","), ",")[[1]]))
+    lonv <- as.numeric(trimws(strsplit(paste(lon, collapse = ","), ",")[[1]]))
+    if (length(latv) != length(lonv)) {
+      res$status <- 400
+      return(handle_error("lat and lon must have the same number of comma-separated values.", "html"))
+    }
+  }
   area <- switch(
     method %||% "",
-    "latlon" = data.frame(
-      lat = as.numeric(trimws(strsplit(paste(lat, collapse = ","), ",")[[1]])),
-      lon = as.numeric(trimws(strsplit(paste(lon, collapse = ","), ",")[[1]]))
-    ),
+    "latlon" = data.frame(lat = latv, lon = lonv),
     "FIPS" = trimws(strsplit(paste(fips, collapse = ","), ",")[[1]]),
     "SHP" = shape,
     NULL
@@ -264,14 +272,14 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
 function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, sitenumber = 0, fileextension = "html", scale = NULL, res) {
-  # One method per analysis; auto-detected from which input is present.
-  method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
-  area <- sites %||% shape %||% fips
-
-  if (is.null(method) || is.null(area)) {
+  # One method per analysis; require exactly one input so an ambiguous request
+  # (e.g. both sites and fips) fails cleanly instead of silently picking one.
+  if (sum(!is.null(sites), !is.null(shape), !is.null(fips)) != 1) {
     res$status <- 400
-    return(handle_error("You must provide sites, a shape, or fips.", "html"))
+    return(handle_error("Provide exactly one of sites, shape, or fips.", "html"))
   }
+  method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
+  area <- sites %||% shape %||% fips
 
   # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site.
   sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
@@ -312,7 +320,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, sitenumber = 0, fi
 .handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
 
 .handoff_new_token <- function() {
-  paste(sample(c(0:9, letters), 24, replace = TRUE), collapse = "")
+  # Tokens are bearer credentials, so prefer a cryptographically-secure RNG.
+  if (requireNamespace("openssl", quietly = TRUE)) {
+    paste(as.character(openssl::rand_bytes(18)), collapse = "")  # 36 hex chars, CSPRNG
+  } else {
+    paste(sample(c(0:9, letters), 24, replace = TRUE), collapse = "")
+  }
 }
 .handoff_purge_expired <- function() {
   now <- as.numeric(Sys.time())
@@ -343,6 +356,8 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
     payload = list(method = method, sites = sites, fips = fips, shape = shape, radius = radius),
     expires = expires
   )
+  # The token is a bearer credential -- don't let it sit in shared/proxy caches.
+  res$setHeader("Cache-Control", "no-store")
   list(token = token, expires = expires)
 }
 
@@ -356,6 +371,7 @@ function(token, res) {
     res$status <- 404
     return(handle_error("Unknown or expired handoff token."))
   }
+  res$setHeader("Cache-Control", "no-store")  # bearer-credential payload, not cacheable
   entry$payload
 }
 
