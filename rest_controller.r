@@ -78,6 +78,26 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
   )
 }
 
+#* CORS support so browser apps (e.g. EJScreen) can fetch()/POST cross-origin.
+#* The single-site report flow uses a top-level window.open() GET and needs no
+#* CORS, but the /handoff POST and any future POST endpoints do. Public data API,
+#* so origin is open; tighten to specific origins here if ever needed.
+#* @filter cors
+function(req, res) {
+  res$setHeader("Access-Control-Allow-Origin", "*")
+  if (identical(req$REQUEST_METHOD, "OPTIONS")) {
+    # Respond to the CORS preflight request directly.
+    res$setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    res$setHeader(
+      "Access-Control-Allow-Headers",
+      req$HTTP_ACCESS_CONTROL_REQUEST_HEADERS %||% "Content-Type"
+    )
+    res$status <- 200L
+    return(list())
+  }
+  plumber::forward()
+}
+
 #* Return EJAM analysis data as JSON based on geography
 #* @param sites A data frame of site coordinates (lat/lon)
 #* @param shape A GeoJSON string representing the area of interest
@@ -145,20 +165,39 @@ function(attribute = "pctunemployed", value=.9, res) {
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
-#* @param sitenumber Which site, in a multi-site analysis, to run a report for. Defaults to 1.
+#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites.
 #* @param fileextension Whether to return a PDF or HTML file. Defaults to PDF.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
 function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumber=1, fileextension="pdf", res) {
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
-  area <- if (method == "latlon") data.frame(lat = as.numeric(lat), lon = as.numeric(lon)) else shape %||% fips
-  
+
+  # Multisite support: lat/lon and fips may be comma-separated lists, one site
+  # each. Splitting here lets the same endpoint serve single-site (one value)
+  # and multisite (several values) requests. Each FIPS code is a separate site
+  # (no fipper() expansion), so a list of counties reports as a list of counties.
+  area <- switch(
+    method %||% "",
+    "latlon" = data.frame(
+      lat = as.numeric(trimws(strsplit(paste(lat, collapse = ","), ",")[[1]])),
+      lon = as.numeric(trimws(strsplit(paste(lon, collapse = ","), ",")[[1]]))
+    ),
+    "FIPS" = trimws(strsplit(paste(fips, collapse = ","), ",")[[1]]),
+    "SHP" = shape,
+    NULL
+  )
+
   if (is.null(method) || is.null(area)) {
     res$status <- 400
     return(handle_error("You must provide valid coordinates, a shape, or a FIPS code.", "html"))
   }
-  
+
+  # Normalize sitenumber. 0 or "overall" -> aggregate multisite report
+  # (ejam2report renders results_overall); otherwise a single site.
+  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
+  if (is.na(sitenum)) sitenum <- 1
+
   # Perform the EJAM analysis.
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint="report"),
@@ -173,17 +212,18 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
     return(result)
   }
   
-  # Get submitted polygon shape to appear in report map.
+  # Get submitted polygon shape(s) to appear in report map.
   to_map<-NULL # Clear any previous maps
   if (method == "SHP"){
     to_map<-geojson_sf(area) # TBD: get this returned from ejamit_interface
-    to_map$ejam_uniq_id <- 1 # Might run into issues here for multisite reports
+    to_map$ejam_uniq_id <- seq_len(nrow(to_map)) # one id per feature (multisite-safe)
   }
 
   # Generate and return the report.
   ext <- tolower(fileextension)
-  report_output <- ejam2report(result, sitenumber = sitenumber, return_html = (ext == "html"), launch_browser = FALSE, site_method = method, shp=to_map,
-    report_title="EJSCREEN Community Report", fileextension=ext)
+  rpt_title <- if (sitenum == 0) "EJSCREEN Multisite Report" else "EJSCREEN Community Report"
+  report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"), launch_browser = FALSE, site_method = method, shp=to_map,
+    report_title=rpt_title, fileextension=ext)
 
   if (ext == "html") {
     res$setHeader("Content-Type", "text/html")
@@ -213,6 +253,67 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
       return(res)
     }
   }
+}
+
+# ---- Site handoff (token-based) for launching the EJAM app pre-loaded ----
+# An external app (e.g. EJScreen) POSTs a set of selected places and gets back a
+# short token; it then opens the EJAM app at  ...?handoff=<token>  and the app
+# fetches GET /handoff/<token> to pre-load those places. This avoids URL-length
+# limits when handing off polygons.
+#
+# NOTE: this draft uses a simple in-process store with a TTL. On Cloud Run with
+# more than one instance, a token created on instance A may not resolve on
+# instance B. For production use a shared store (GCS object / Firestore / Redis)
+# or run the service with min-instances=1 and a single max instance.
+.handoff_store    <- new.env(parent = emptyenv())
+.handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
+
+.handoff_new_token <- function() {
+  paste(sample(c(0:9, letters), 24, replace = TRUE), collapse = "")
+}
+.handoff_purge_expired <- function() {
+  now <- as.numeric(Sys.time())
+  for (k in ls(.handoff_store)) {
+    if (.handoff_store[[k]]$expires < now) rm(list = k, envir = .handoff_store)
+  }
+}
+
+#* Store a set of selected sites for handoff to the EJAM app; returns a token.
+#* @param method One of "latlon", "FIPS", or "SHP" (optional; inferred if omitted)
+#* @param sites Array of {lat, lon} site objects
+#* @param fips Array of FIPS codes (each one a separate site)
+#* @param shape A GeoJSON FeatureCollection of polygons
+#* @param radius Buffer radius in miles
+#* @post /handoff
+function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, res) {
+  .handoff_purge_expired()
+  if (is.null(sites) && is.null(fips) && is.null(shape)) {
+    res$status <- 400
+    return(handle_error("Provide sites, fips, or shape to hand off."))
+  }
+  if (is.null(method)) {
+    method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
+  }
+  token   <- .handoff_new_token()
+  expires <- as.numeric(Sys.time()) + .handoff_ttl_secs
+  .handoff_store[[token]] <- list(
+    payload = list(method = method, sites = sites, fips = fips, shape = shape, radius = radius),
+    expires = expires
+  )
+  list(token = token, expires = expires)
+}
+
+#* Retrieve a previously stored handoff payload by token.
+#* @param token The handoff token returned by POST /handoff
+#* @get /handoff/<token>
+function(token, res) {
+  .handoff_purge_expired()
+  entry <- .handoff_store[[token]]
+  if (is.null(entry)) {
+    res$status <- 404
+    return(handle_error("Unknown or expired handoff token."))
+  }
+  entry$payload
 }
 
 #* Serve static assets from the ./assets directory
