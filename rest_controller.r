@@ -106,7 +106,8 @@ function(req, res) {
 #* @param geometries A boolean to indicate whether to include geometries in the output
 #* @param scale The Census geography at which to return results (blockgroup or county)
 #* @post /data
-function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE, scale = NULL, res) {
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, geometries = FALSE, scale = NULL, res) {
+  if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # Determine the input method.
   method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
   area <- sites %||% shape %||% fips
@@ -198,7 +199,8 @@ report_response <- function(result, method, to_map, sitenum, ext, res) {
 #* @param fileextension Whether to return a PDF or HTML file. Defaults to PDF.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
-function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumber=1, fileextension="pdf", res) {
+function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius = NULL, sitenumber=1, fileextension="pdf", res) {
+  if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
 
@@ -271,7 +273,8 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
 #* @param scale For FIPS requests, the unit (blockgroup or county)
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
-function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, sitenumber = 0, fileextension = "html", scale = NULL, res) {
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "html", scale = NULL, res) {
+  if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # One method per analysis; require exactly one input so an ambiguous request
   # (e.g. both sites and fips) fails cleanly instead of silently picking one.
   if (sum(!is.null(sites), !is.null(shape), !is.null(fips)) != 1) {
@@ -341,7 +344,8 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, sitenumber = 0, fi
 #* @param shape A GeoJSON FeatureCollection of polygons
 #* @param radius Buffer radius in miles
 #* @post /handoff
-function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, res) {
+function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, buffer = NULL, res) {
+  if (is.null(radius)) {radius <- buffer}  # buffer is a synonym (alias) for radius
   .handoff_purge_expired()
   if (is.null(sites) && is.null(fips) && is.null(shape)) {
     res$status <- 400
