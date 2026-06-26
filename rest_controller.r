@@ -219,11 +219,14 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
     to_map$ejam_uniq_id <- seq_len(nrow(to_map)) # one id per feature (multisite-safe)
   }
 
-  # Generate and return the report.
+  # Generate and return the report. Leave report_title unset so ejam2report()
+  # chooses the correct header itself based on sitenumber: the EJAM defaults are
+  # "EJSCREEN Community Report" for a single site and "EJSCREEN Multisite Summary"
+  # for the aggregate (sitenumber = 0). See ejam2report()'s report_title /
+  # report_title_multisite handling.
   ext <- tolower(fileextension)
-  rpt_title <- if (sitenum == 0) "EJSCREEN Multisite Report" else "EJSCREEN Community Report"
   report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"), launch_browser = FALSE, site_method = method, shp=to_map,
-    report_title=rpt_title, fileextension=ext)
+    fileextension=ext)
 
   if (ext == "html") {
     res$setHeader("Content-Type", "text/html")
