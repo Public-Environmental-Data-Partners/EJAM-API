@@ -58,7 +58,7 @@ RUN MAKEFLAGS="-j$(nproc)" R -e " \
     options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest')); \
     \
     # Pre-install key dependencies first \
-    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr')); \
+    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr', 'openssl')); \
     \
     # Install a fixed fork of AOI \
     remotes::install_github('ericnost/AOI', upgrade='never'); \

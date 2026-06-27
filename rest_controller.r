@@ -166,6 +166,13 @@ function(attribute = "pctunemployed", value=.9, res) {
 # report_title is intentionally left unset so ejam2report() picks the correct
 # header by sitenumber ("EJSCREEN Community Report" vs "EJSCREEN Multisite Summary").
 report_response <- function(result, method, to_map, sitenum, ext, res) {
+  ext <- tolower(ext)
+  if (!ext %in% c("html", "pdf")) {
+    res$status <- 400
+    res$setHeader("Content-Type", "text/html")
+    res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
+    return(res)
+  }
   report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
     launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
 
@@ -270,10 +277,9 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
 #* @param fileextension "html" (default) or "pdf"
-#* @param scale For FIPS requests, the unit (blockgroup or county)
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
-function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "html", scale = NULL, res) {
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "html", res) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # One method per analysis; require exactly one input so an ambiguous request
   # (e.g. both sites and fips) fails cleanly instead of silently picking one.
@@ -289,7 +295,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
   if (is.na(sitenum)) sitenum <- 0
 
   result <- tryCatch(
-    ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), scale = scale, endpoint = "report"),
+    ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint = "report"),
     error = function(e) {
       res$status <- 400
       handle_error(e$message, "html")
@@ -323,12 +329,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 .handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
 
 .handoff_new_token <- function() {
-  # Tokens are bearer credentials, so prefer a cryptographically-secure RNG.
-  if (requireNamespace("openssl", quietly = TRUE)) {
-    paste(as.character(openssl::rand_bytes(18)), collapse = "")  # 36 hex chars, CSPRNG
-  } else {
-    paste(sample(c(0:9, letters), 24, replace = TRUE), collapse = "")
+  # Tokens are bearer credentials, so REQUIRE a cryptographically-secure RNG --
+  # fail fast rather than silently fall back to a guessable token.
+  if (!requireNamespace("openssl", quietly = TRUE)) {
+    stop("The 'openssl' package is required to mint secure handoff tokens.")
   }
+  paste(as.character(openssl::rand_bytes(18)), collapse = "")  # 36 hex chars, CSPRNG
 }
 .handoff_purge_expired <- function() {
   now <- as.numeric(Sys.time())
@@ -355,7 +361,7 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
     method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   }
   token   <- .handoff_new_token()
-  expires <- as.numeric(Sys.time()) + .handoff_ttl_secs
+  expires <- floor(as.numeric(Sys.time())) + .handoff_ttl_secs  # integer epoch seconds
   .handoff_store[[token]] <- list(
     payload = list(method = method, sites = sites, fips = fips, shape = shape, radius = radius),
     expires = expires
