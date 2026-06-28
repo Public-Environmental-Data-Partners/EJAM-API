@@ -221,6 +221,10 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   if (identical(method, "latlon")) {
     latv <- as.numeric(trimws(strsplit(paste(lat, collapse = ","), ",")[[1]]))
     lonv <- as.numeric(trimws(strsplit(paste(lon, collapse = ","), ",")[[1]]))
+    if (anyNA(latv) || anyNA(lonv)) {
+      res$status <- 400
+      return(handle_error("lat and lon must contain only numeric comma-separated values.", "html"))
+    }
     if (length(latv) != length(lonv)) {
       res$status <- 400
       return(handle_error("lat and lon must have the same number of comma-separated values.", "html"))
