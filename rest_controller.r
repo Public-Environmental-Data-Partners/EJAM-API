@@ -337,7 +337,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 }
 .handoff_max_tokens <- .handoff_env_numeric_or_default("HANDOFF_MAX_TOKENS", 64)
 .handoff_max_payload_bytes <- .handoff_env_numeric_or_default("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
-.handoff_token_collision_retries <- 8L
+.handoff_token_collision_retries <- as.integer(.handoff_env_numeric_or_default("HANDOFF_TOKEN_COLLISION_RETRIES", 8))
 
 .handoff_new_token <- function() {
   # Tokens are bearer credentials, so REQUIRE a cryptographically-secure RNG --
@@ -378,11 +378,11 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   payload_bytes <- length(payload_raw)
   if (is.finite(.handoff_max_payload_bytes) && payload_bytes > .handoff_max_payload_bytes) {
     res$status <- 413
-    return(handle_error(sprintf("Handoff payload too large (max %d bytes).", as.integer(.handoff_max_payload_bytes))))
+    return(handle_error(sprintf("Handoff payload size %d bytes exceeds limit of %d bytes.", payload_bytes, as.integer(.handoff_max_payload_bytes))))
   }
   if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
     res$status <- 429
-    return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens).", as.integer(.handoff_max_tokens))))
+    return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens). Retry after a short delay; tokens expire after 1 hour.", as.integer(.handoff_max_tokens))))
   }
   token <- NULL
   for (i in seq_len(.handoff_token_collision_retries)) {
