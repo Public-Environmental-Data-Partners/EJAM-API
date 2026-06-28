@@ -33,7 +33,7 @@ A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652
 
 ### Multisite report via POST
 
-`report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large/mixed site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site), plus:
+`report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, or `fips` per request, plus:
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site.
 - `fileextension` - `html` (default) or `pdf`.
 
