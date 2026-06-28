@@ -331,12 +331,13 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 # or run the service with min-instances=1 and a single max instance.
 .handoff_store    <- new.env(parent = emptyenv())
 .handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
-.handoff_env_num_or <- function(name, default_value) {
+.handoff_env_numeric_or_default <- function(name, default_value) {
   val <- suppressWarnings(as.numeric(Sys.getenv(name, as.character(default_value))))
   if (!is.finite(val) || val <= 0) default_value else val
 }
-.handoff_max_tokens <- .handoff_env_num_or("HANDOFF_MAX_TOKENS", 64)
-.handoff_max_payload_bytes <- .handoff_env_num_or("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
+.handoff_max_tokens <- .handoff_env_numeric_or_default("HANDOFF_MAX_TOKENS", 64)
+.handoff_max_payload_bytes <- .handoff_env_numeric_or_default("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
+.handoff_token_collision_retries <- 8L
 
 .handoff_new_token <- function() {
   # Tokens are bearer credentials, so REQUIRE a cryptographically-secure RNG --
@@ -384,7 +385,7 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
     return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens).", as.integer(.handoff_max_tokens))))
   }
   token <- NULL
-  for (i in seq_len(8)) {
+  for (i in seq_len(.handoff_token_collision_retries)) {
     candidate <- .handoff_new_token()
     if (is.null(.handoff_store[[candidate]])) {
       token <- candidate
