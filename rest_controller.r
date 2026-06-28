@@ -374,11 +374,11 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   payload_bytes <- length(serialize(payload, connection = NULL))
   if (is.finite(.handoff_max_payload_bytes) && payload_bytes > .handoff_max_payload_bytes) {
     res$status <- 413
-    return(handle_error(sprintf("Handoff payload too large (max %s bytes).", as.integer(.handoff_max_payload_bytes))))
+    return(handle_error(sprintf("Handoff payload too large (max %d bytes).", as.integer(.handoff_max_payload_bytes))))
   }
   if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
     res$status <- 429
-    return(handle_error(sprintf("Handoff token capacity reached (max %s active tokens).", as.integer(.handoff_max_tokens))))
+    return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens).", as.integer(.handoff_max_tokens))))
   }
   token   <- .handoff_new_token()
   expires <- floor(as.numeric(Sys.time())) + .handoff_ttl_secs  # integer epoch seconds
