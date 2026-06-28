@@ -51,7 +51,7 @@ ARG EJAM_VERSION=v3.2022.0
 # Record the version in the image so the running API can report which EJAM it was built with.
 ENV EJAM_VERSION=${EJAM_VERSION}
 
-# Clone EJAM into a fixed scratch dir (its name is arbitrary; it is removed after install).
+# Clone EJAM into a fixed scratch dir (its name is arbitrary; it is deleted from the container filesystem after install).
 RUN git clone --branch "${EJAM_VERSION}" --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM_src && \
     cd /EJAM_src && \
     git lfs pull
