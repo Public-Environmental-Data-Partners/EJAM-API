@@ -337,7 +337,6 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 }
 .handoff_max_tokens <- .handoff_env_num_or("HANDOFF_MAX_TOKENS", 64)
 .handoff_max_payload_bytes <- .handoff_env_num_or("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
-.handoff_active_tokens <- 0L
 
 .handoff_new_token <- function() {
   # Tokens are bearer credentials, so REQUIRE a cryptographically-secure RNG --
@@ -349,15 +348,10 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 }
 .handoff_purge_expired <- function() {
   now <- as.numeric(Sys.time())
-  removed <- 0L
   for (k in ls(.handoff_store)) {
     if (.handoff_store[[k]]$expires < now) {
       rm(list = k, envir = .handoff_store)
-      removed <- removed + 1L
     }
-  }
-  if (removed > 0L) {
-    .handoff_active_tokens <<- max(0L, .handoff_active_tokens - removed)
   }
 }
 
@@ -385,18 +379,27 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
     res$status <- 413
     return(handle_error(sprintf("Handoff payload too large (max %d bytes).", as.integer(.handoff_max_payload_bytes))))
   }
-  if (is.finite(.handoff_max_tokens) && .handoff_active_tokens >= .handoff_max_tokens) {
+  if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
     res$status <- 429
     return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens).", as.integer(.handoff_max_tokens))))
   }
-  token   <- .handoff_new_token()
-  while (!is.null(.handoff_store[[token]])) token <- .handoff_new_token()
+  token <- NULL
+  for (i in seq_len(8)) {
+    candidate <- .handoff_new_token()
+    if (is.null(.handoff_store[[candidate]])) {
+      token <- candidate
+      break
+    }
+  }
+  if (is.null(token)) {
+    res$status <- 503
+    return(handle_error("Unable to mint a unique handoff token; retry request."))
+  }
   expires <- floor(as.numeric(Sys.time())) + .handoff_ttl_secs  # integer epoch seconds
   .handoff_store[[token]] <- list(
     payload_raw = payload_raw,
     expires = expires
   )
-  .handoff_active_tokens <<- .handoff_active_tokens + 1L
   # The token is a bearer credential -- don't let it sit in shared/proxy caches.
   res$setHeader("Cache-Control", "no-store")
   list(token = token, expires = expires)
@@ -413,7 +416,7 @@ function(token, res) {
     return(handle_error("Unknown or expired handoff token."))
   }
   res$setHeader("Cache-Control", "no-store")  # bearer-credential payload, not cacheable
-  if (!is.null(entry$payload_raw)) unserialize(entry$payload_raw) else entry$payload
+  unserialize(entry$payload_raw)
 }
 
 #* Serve static assets from the ./assets directory
