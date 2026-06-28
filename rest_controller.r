@@ -333,7 +333,10 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 .handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
 .handoff_env_numeric_or_default <- function(name, default_value) {
   val <- suppressWarnings(as.numeric(Sys.getenv(name, as.character(default_value))))
-  if (!is.finite(val) || val <= 0) default_value else val
+  if (!is.finite(val) || val <= 0) {
+    return(default_value)
+  }
+  val
 }
 .handoff_max_tokens <- .handoff_env_numeric_or_default("HANDOFF_MAX_TOKENS", 64)
 .handoff_max_payload_bytes <- .handoff_env_numeric_or_default("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
@@ -373,6 +376,10 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   if (is.null(method)) {
     method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   }
+  if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
+    res$status <- 429
+    return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens). Retry after a short delay; tokens expire after 1 hour.", as.integer(.handoff_max_tokens))))
+  }
   payload <- list(method = method, sites = sites, fips = fips, shape = shape, radius = radius)
   payload_raw <- serialize(payload, connection = NULL)
   payload_bytes <- length(payload_raw)
@@ -380,12 +387,8 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
     res$status <- 413
     return(handle_error(sprintf("Handoff payload size %d bytes exceeds limit of %d bytes.", payload_bytes, as.integer(.handoff_max_payload_bytes))))
   }
-  if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
-    res$status <- 429
-    return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens). Retry after a short delay; tokens expire after 1 hour.", as.integer(.handoff_max_tokens))))
-  }
   token <- NULL
-  for (i in seq_len(.handoff_token_collision_retries)) {
+  for (attempt in seq_len(.handoff_token_collision_retries)) {
     candidate <- .handoff_new_token()
     if (is.null(.handoff_store[[candidate]])) {
       token <- candidate
