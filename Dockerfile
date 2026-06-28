@@ -43,9 +43,17 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
     chmod +x /usr/local/bin/google-chrome && \
     echo 'CHROMOTE_CHROME=/usr/local/bin/google-chrome' >> /etc/R/Renviron.site
 
-# Clone EJAM
-RUN git clone --branch v2.32.8.1 --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM-2.32.8.1 && \
-    cd /EJAM-2.32.8.1 && \
+# EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
+# Override at build time without editing this file, e.g.:
+#   docker build --build-arg EJAM_VERSION=v3.2024.0 .
+# A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
+ARG EJAM_VERSION=v3.2022.0
+# Record the version in the image so the running API can report which EJAM it was built with.
+ENV EJAM_VERSION=${EJAM_VERSION}
+
+# Clone EJAM into a fixed scratch dir (its name is arbitrary; it is removed after install).
+RUN git clone --branch "${EJAM_VERSION}" --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM_src && \
+    cd /EJAM_src && \
     git lfs pull
 
 # Install Dependencies & EJAM
@@ -56,19 +64,19 @@ RUN MAKEFLAGS="-j$(nproc)" R -e " \
     options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest')); \
     \
     # Pre-install key dependencies first \
-    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr')); \
+    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr', 'openssl')); \
     \
     # Install a fixed fork of AOI \
     remotes::install_github('ericnost/AOI', upgrade='never'); \
     \
     # Install EJAM using upgrade='never' so it doesn't break the stable environment \
-    remotes::install_local('/EJAM-2.32.8.1', dependencies=TRUE, upgrade='never', build=FALSE, INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')); \
+    remotes::install_local('/EJAM_src', dependencies=TRUE, upgrade='never', build=FALSE, INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')); \
     \
     # Verify installation \
     if (!('EJAM' %in% installed.packages()[, 'Package'])) stop('EJAM FAILED TO INSTALL!'); \
     " && \
     # Clean up the cloned source directory \
-    rm -rf /EJAM-2.32.8.1
+    rm -rf /EJAM_src
 
 # Reset frontend
 ENV DEBIAN_FRONTEND=dialog
