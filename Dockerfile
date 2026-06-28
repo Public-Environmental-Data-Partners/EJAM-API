@@ -44,10 +44,8 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
     echo 'CHROMOTE_CHROME=/usr/local/bin/google-chrome' >> /etc/R/Renviron.site
 
 # Clone EJAM
-# Bumped from v2.32.8.1 -> v3.2022.0: the multisite-via-API path (GET /report
-# with sitenumber=0 rendering results_overall) is mature in the v3.x line.
-RUN git clone --branch v3.2022.0 --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM-3.2022.0 && \
-    cd /EJAM-3.2022.0 && \
+RUN git clone --branch v2.32.8.1 --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM-2.32.8.1 && \
+    cd /EJAM-2.32.8.1 && \
     git lfs pull
 
 # Install Dependencies & EJAM
@@ -58,19 +56,19 @@ RUN MAKEFLAGS="-j$(nproc)" R -e " \
     options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest')); \
     \
     # Pre-install key dependencies first \
-    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr', 'openssl')); \
+    install.packages(c('remotes', 'plumber', 'sf', 'mapview', 'tidycensus', 'magrittr')); \
     \
     # Install a fixed fork of AOI \
     remotes::install_github('ericnost/AOI', upgrade='never'); \
     \
     # Install EJAM using upgrade='never' so it doesn't break the stable environment \
-    remotes::install_local('/EJAM-3.2022.0', dependencies=TRUE, upgrade='never', build=FALSE, INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')); \
+    remotes::install_local('/EJAM-2.32.8.1', dependencies=TRUE, upgrade='never', build=FALSE, INSTALL_opts=c('--preclean', '--no-multiarch', '--with-keep.source')); \
     \
     # Verify installation \
     if (!('EJAM' %in% installed.packages()[, 'Package'])) stop('EJAM FAILED TO INSTALL!'); \
     " && \
     # Clean up the cloned source directory \
-    rm -rf /EJAM-3.2022.0
+    rm -rf /EJAM-2.32.8.1
 
 # Reset frontend
 ENV DEBIAN_FRONTEND=dialog
