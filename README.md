@@ -92,7 +92,7 @@ Two endpoints let an external app (e.g. EJScreen) hand a set of selected places 
 
 The caller opens the EJAM app at `https://ejam.publicenvirodata.org/?handoff=<token>`; the app fetches `GET /handoff/<token>` on startup and pre-loads those places.
 
-> The current store is in-process with a 1-hour TTL. On Cloud Run with more than one instance, a token created on one instance will not resolve on another — use a shared store (GCS/Firestore/Redis) or run with `min-instances=1` and a single max instance.
+> The current store is in-process with a 1-hour TTL and bounded capacity. By default, `POST /handoff` accepts payloads up to 1 MiB (`HANDOFF_MAX_PAYLOAD_BYTES=1048576`) and up to 64 active tokens (`HANDOFF_MAX_TOKENS=64`) before returning an error. On Cloud Run with more than one instance, a token created on one instance will not resolve on another — use a shared store (GCS/Firestore/Redis) or run with `min-instances=1` and a single max instance.
 
 ## CORS
 

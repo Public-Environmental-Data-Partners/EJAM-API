@@ -331,6 +331,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 # or run the service with min-instances=1 and a single max instance.
 .handoff_store    <- new.env(parent = emptyenv())
 .handoff_ttl_secs <- 60 * 60  # tokens live for 1 hour
+.handoff_env_num_or <- function(name, default_value) {
+  val <- suppressWarnings(as.numeric(Sys.getenv(name, as.character(default_value))))
+  if (!is.finite(val) || val <= 0) default_value else val
+}
+.handoff_max_tokens <- .handoff_env_num_or("HANDOFF_MAX_TOKENS", 64)
+.handoff_max_payload_bytes <- .handoff_env_num_or("HANDOFF_MAX_PAYLOAD_BYTES", 1048576)  # 1 MiB
 
 .handoff_new_token <- function() {
   # Tokens are bearer credentials, so REQUIRE a cryptographically-secure RNG --
@@ -364,10 +370,20 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   if (is.null(method)) {
     method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   }
+  payload <- list(method = method, sites = sites, fips = fips, shape = shape, radius = radius)
+  payload_bytes <- length(serialize(payload, connection = NULL))
+  if (is.finite(.handoff_max_payload_bytes) && payload_bytes > .handoff_max_payload_bytes) {
+    res$status <- 413
+    return(handle_error(sprintf("Handoff payload too large (max %s bytes).", as.integer(.handoff_max_payload_bytes))))
+  }
+  if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
+    res$status <- 429
+    return(handle_error(sprintf("Handoff token capacity reached (max %s active tokens).", as.integer(.handoff_max_tokens))))
+  }
   token   <- .handoff_new_token()
   expires <- floor(as.numeric(Sys.time())) + .handoff_ttl_secs  # integer epoch seconds
   .handoff_store[[token]] <- list(
-    payload = list(method = method, sites = sites, fips = fips, shape = shape, radius = radius),
+    payload = payload,
     expires = expires
   )
   # The token is a bearer credential -- don't let it sit in shared/proxy caches.
