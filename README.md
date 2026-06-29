@@ -8,6 +8,15 @@ Recreating that API would require extensive reverse engineering of the ArcGIS ma
 # Model
 The API exposes report and data endpoints, plus a token-based handoff for launching the EJAM app pre-loaded.
 
+## Base URLs
+The canonical base URL is the Cloud Run service:
+`https://ejamapi-84652557241.us-central1.run.app`
+
+A friendlier branded base is also available now and proxies the **same** API through Cloudflare (with permissive CORS for browser apps):
+`https://api.ejanalysis.com` (and the equivalent alias `https://ejamapi.ejanalysis.com`)
+
+All of the example URLs below work with either base — just swap the host. For example, `https://api.ejanalysis.com/report?buffer=1&fips=10001` is equivalent to the Cloud Run URL. (The EJAM R package reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION`, so it can point at either base; see `?url_package` and `?url_ejamapi` in EJAM.)
+
 ## Reports
 `report` accepts GET requests with the following parameters:
 - `lat` - the latitude of a given point, or comma-separated list like lat=33,32.5
