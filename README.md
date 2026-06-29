@@ -66,9 +66,17 @@ df
 # Set-up
 1. Work locally with EJAM by installing R/RStudio. Follow the [installation instructions](https://ejanalysis.github.io/EJAM/articles/installing.html) in the [EJAM documentation](https://ejanalysis.org/ejamdocs).
 2. Test changes to the API (i.e. modify `rest_controller.r`)
-3. Re-build and tag the Docker image
+3. Re-build and tag the Docker image (the EJAM version is controlled by the `EJAM_VERSION` build arg — see below)
 4. Push to Docker Hub and/or Google Artifact Registry
 5. Re-deploy in Google Cloud Run
+
+## Choosing the EJAM version
+
+The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v2.32.8.1`, matching the version the image currently deploys). This value is passed directly to `git clone --branch`, so it must be a valid git ref (typically a tag like `v2.32.8.1`, including the leading `v`). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
+
+- **Override at build time** (no Dockerfile edit), e.g. `docker build --build-arg EJAM_VERSION=v3.2022.0 .` or `docker build --build-arg EJAM_VERSION=v3.2023.0 .`
+- **Control it at the repo level:** set a GitHub Actions repository variable named `EJAM_VERSION` (Settings → Secrets and variables → Actions → Variables), and have the image-build step pass it through with `--build-arg EJAM_VERSION=${{ vars.EJAM_VERSION }}`. (This repo currently builds the image manually per the steps above; that variable is consumed automatically once an image-build workflow is added.)
+- The selected version is also recorded in the image as the `EJAM_VERSION` environment variable, so the running API can report which EJAM release it was built with.
 
 ---
 
