@@ -47,7 +47,7 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
 # Override at build time without editing this file, e.g.:
 #   docker build --build-arg EJAM_VERSION=v3.2024.0 .
 # A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
-ARG EJAM_VERSION=v3.2022.0
+ARG EJAM_VERSION=v2.32.8.1
 # Record the version in the image so the running API can report which EJAM it was built with.
 ENV EJAM_VERSION=${EJAM_VERSION}
 

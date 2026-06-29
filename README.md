@@ -72,7 +72,7 @@ df
 
 ## Choosing the EJAM version
 
-The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v3.2022.0`). This value is passed directly to `git clone --branch`, so it must be a valid git ref (typically a tag like `v3.2022.0`, including the leading `v`). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
+The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v2.32.8.1`, matching the version the image currently deploys). This value is passed directly to `git clone --branch`, so it must be a valid git ref (typically a tag like `v2.32.8.1`, including the leading `v`). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
 
 - **Override at build time** (no Dockerfile edit): `docker build --build-arg EJAM_VERSION=v3.2024.0 .`
 - **Control it at the repo level:** set a GitHub Actions repository variable named `EJAM_VERSION` (Settings → Secrets and variables → Actions → Variables), and have the image-build step pass it through with `--build-arg EJAM_VERSION=${{ vars.EJAM_VERSION }}`. (This repo currently builds the image manually per the steps above; that variable is consumed automatically once an image-build workflow is added.)
