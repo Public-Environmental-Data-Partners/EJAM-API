@@ -48,6 +48,9 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
 #   docker build --build-arg EJAM_VERSION=v3.2022.0 .
 #   docker build --build-arg EJAM_VERSION=v3.2023.0 .
 #   docker build --build-arg EJAM_VERSION=v3.2024.0 .
+# A branch name also works (no leading "v"), e.g. EJAM_VERSION=development -- but a branch
+# moves while the "git clone" RUN layer below is cached, so a plain rebuild may reuse an old
+# clone of that branch; force a fresh pull of the current tip with "docker build --no-cache".
 # A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
 ARG EJAM_VERSION=v2.32.8.1
 # Record the version in the image so the running API can report which EJAM it was built with.
