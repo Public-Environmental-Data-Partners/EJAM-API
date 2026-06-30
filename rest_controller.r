@@ -99,10 +99,12 @@ function(req, res) {
 }
 
 #* Return EJAM analysis data as JSON based on geography
+#* @tag Data
 #* @param sites A data frame of site coordinates (lat/lon)
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
+#* @param radius Synonym for buffer.
 #* @param geometries A boolean to indicate whether to include geometries in the output
 #* @param scale The Census geography at which to return results (blockgroup or county)
 #* @post /data
@@ -146,6 +148,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, geo
 }
 
 #* Return EJAM analysis data as JSON based on attribute query
+#* @tag Data
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
 #* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
 #* @post /query
@@ -197,11 +200,13 @@ report_response <- function(result, method, to_map, sitenum, ext, res) {
 }
 
 #* Generate an EJAM report
+#* @tag Reports
 #* @param lat Latitude of the site
 #* @param lon Longitude of the site
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
+#* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites.
 #* @param fileextension Whether to return a PDF or HTML file. Defaults to PDF.
 #* @serializer contentType list(type = "application/octet-stream")
@@ -275,10 +280,12 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 
 #* Generate an EJAM report from a POST body (supports many/large polygons and mixed/large site sets).
 #* Same report engine as GET /report, but inputs travel in the request body so there is no URL-length limit.
+#* @tag Reports
 #* @param sites An array of {lat, lon} site objects
 #* @param shape A GeoJSON FeatureCollection string (one or more polygons)
 #* @param fips An array of FIPS codes (each one a separate site)
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
+#* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
 #* @param fileextension "html" (default) or "pdf"
 #* @serializer contentType list(type = "application/octet-stream")
@@ -360,11 +367,13 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 }
 
 #* Store a set of selected sites for handoff to the EJAM app; returns a token.
+#* @tag Handoff
 #* @param method One of "latlon", "FIPS", or "SHP" (optional; inferred if omitted)
 #* @param sites Array of {lat, lon} site objects
 #* @param fips Array of FIPS codes (each one a separate site)
 #* @param shape A GeoJSON FeatureCollection of polygons
 #* @param radius Buffer radius in miles
+#* @param buffer Synonym for radius.
 #* @post /handoff
 function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, buffer = NULL, res) {
   if (is.null(radius)) {radius <- buffer}  # buffer is a synonym (alias) for radius
@@ -410,6 +419,7 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
 }
 
 #* Retrieve a previously stored handoff payload by token.
+#* @tag Handoff
 #* @param token The handoff token returned by POST /handoff
 #* @get /handoff/<token>
 function(token, res) {
