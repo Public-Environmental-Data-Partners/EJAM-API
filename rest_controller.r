@@ -18,10 +18,25 @@ library(sf)
 #* <https://github.com/Public-Environmental-Data-Partners/EJAM-API#ejam-api>
 ############################# #
 
+# HTML-escape a string so it is safe to interpolate into an HTML error page,
+# preventing broken markup or reflected injection if a message ever contains
+# user-influenced text. Escape & first so the entity ampersands we add are not
+# themselves double-escaped.
+escape_html <- function(x) {
+  x <- gsub("&", "&amp;",  x, fixed = TRUE)
+  x <- gsub("<", "&lt;",   x, fixed = TRUE)
+  x <- gsub(">", "&gt;",   x, fixed = TRUE)
+  x <- gsub('"', "&quot;", x, fixed = TRUE)
+  x <- gsub("'", "&#39;",  x, fixed = TRUE)
+  x
+}
+
 # Centralized error handling function
 handle_error <- function(message, type = "json") {
   if (type == "html") {
-    return(paste0("<html><body><h3>Error</h3><p>", message, "</p></body></html>"))
+    # Escape the message: HTML error pages are rendered in the browser, so any
+    # special characters in the message must not be treated as markup.
+    return(paste0("<html><body><h3>Error</h3><p>", escape_html(message), "</p></body></html>"))
   }
   return(list(error = message))
 }
