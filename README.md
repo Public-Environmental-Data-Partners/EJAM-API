@@ -6,9 +6,13 @@ In February 2025, USEPA removed its EJSCREEN website from public access, includi
 Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently provide an API; this repo contains files necessary to create a Docker image of EJAM and its dependencies as well as an API model.
 
 # Model
-There are currently two endpoints for the API.
+The key endpoints for the API are **report** and **data**:
 
 ## Reports
+
+The `report` endpoint returns a PDF or HTML report for one or more sites specified by
+point, area (polygon), or FIPS geography.
+
 `report` accepts GET requests with the following parameters:
 - `lat` - the latitude of a given point, or comma-separated list like lat=33,32.5
 - `lon` - the longitude
@@ -27,6 +31,9 @@ A point in the Phoenix area with a 4 mile buffer (radius): https://ejamapi-84652
 A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652557241.us-central1.run.app/report?shape=%7B"type"%3A"FeatureCollection"%2C"features"%3A%5B%7B"type"%3A"Feature"%2C"properties"%3A%7B%7D%2C"geometry"%3A%7B"coordinates"%3A%5B%5B%5B-112.01991856401462%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.51124624304089%5D%5D%5D%2C"type"%3A"Polygon"%7D%7D%5D%7D&buffer=0
 
 ## Data
+
+The `data` endpoint returns a JSON object of EJAM output for a given point, area, or FIPS geography.
+
 `data` accepts POST requests with the following parameters:
 - `sites` - a list of lat/lon pairs e.g. `[{"lat":33, "lon":-112}, {"lat":34, "lon":-114}]`
 - `shape` - a GeoJSON object describing an area of interest, such as a polygon of neighborhood boundaries
@@ -62,6 +69,12 @@ response = requests.post(url, json=data)
 df = pandas.DataFrame.from_dict(response.json())
 df
 ```
+
+## Assets
+
+An assets endpoint returns a file from a pre-defined set of assets. The endpoint is structured as `/assets/<asset_name>`, 
+where `<asset_name>` is the name of the asset file. 
+For example, to retrieve a specific asset, you would make a GET request to `/assets/example_asset.pdf`.
 
 # Set-up
 1. Work locally with EJAM by installing R/RStudio. Follow the [installation instructions](https://ejanalysis.github.io/EJAM/articles/installing.html) in the [EJAM documentation](https://ejanalysis.org/ejamdocs).
