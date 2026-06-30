@@ -215,6 +215,8 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
   }
 }
 
-#* Serve static assets from the ./assets directory
-#* @assets ./assets /
+#* Serve static assets from the ./assets directory at /assets.
+#* NOTE: do NOT mount at root "/", which shadows plumber's OpenAPI/Swagger
+#* docs UI at /__docs__/ and makes the documentation page return 404.
+#* @assets ./assets /assets
 list()
