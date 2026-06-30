@@ -93,6 +93,7 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
 # /data ####
 
 #* Return EJAM analysis data as JSON based on geography
+#* @tag Data
 #* @param sites A data frame of site coordinates (lat/lon)
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
@@ -141,6 +142,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
 # /query ####
 
 #* Return EJAM analysis data as JSON based on attribute query
+#* @tag Data
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
 #* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
 #* @post /query
@@ -158,6 +160,7 @@ function(attribute = "pctunemployed", value=.9, res) {
 # /report ####
 
 #* Generate an EJAM report
+#* @tag Reports
 #* @param lat Latitude of the site
 #* @param lon Longitude of the site
 #* @param shape A GeoJSON string representing the area of interest
