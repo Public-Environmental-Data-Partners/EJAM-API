@@ -18,12 +18,41 @@ library(sf)
 #* <https://github.com/Public-Environmental-Data-Partners/EJAM-API#ejam-api>
 ############################# #
 
+# HTML-escape a string so it is safe to interpolate into an HTML error page,
+# preventing broken markup or reflected injection if a message ever contains
+# user-influenced text. Escape & first so the entity ampersands we add are not
+# themselves double-escaped.
+escape_html <- function(x) {
+  x <- gsub("&", "&amp;",  x, fixed = TRUE)
+  x <- gsub("<", "&lt;",   x, fixed = TRUE)
+  x <- gsub(">", "&gt;",   x, fixed = TRUE)
+  x <- gsub('"', "&quot;", x, fixed = TRUE)
+  x <- gsub("'", "&#39;",  x, fixed = TRUE)
+  x
+}
+
 # Centralized error handling function
 handle_error <- function(message, type = "json") {
   if (type == "html") {
-    return(paste0("<html><body><h3>Error</h3><p>", message, "</p></body></html>"))
+    # Escape the message: HTML error pages are rendered in the browser, so any
+    # special characters in the message must not be treated as markup.
+    return(paste0("<html><body><h3>Error</h3><p>", escape_html(message), "</p></body></html>"))
   }
   return(list(error = message))
+}
+
+# Write an HTML error page to the response with the right status and an
+# explicit text/html Content-Type, then return the response object. The
+# /report endpoints use an octet-stream @serializer (so finished report bytes
+# pass through untouched); returning a bare string there would label these
+# error pages as application/octet-stream and make browsers download them.
+# Returning the response object with Content-Type set -- as report_response()
+# does for successful reports -- delivers the error as a viewable page.
+html_error <- function(res, status, message) {
+  res$status <- status
+  res$setHeader("Content-Type", "text/html")
+  res$body <- handle_error(message, "html")
+  res
 }
 
 # The fipper function processes FIPS inputs, converting area names (e.g., states)
@@ -258,12 +287,10 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
     latv <- as.numeric(trimws(strsplit(paste(lat, collapse = ","), ",")[[1]]))
     lonv <- as.numeric(trimws(strsplit(paste(lon, collapse = ","), ",")[[1]]))
     if (anyNA(latv) || anyNA(lonv)) {
-      res$status <- 400
-      return(handle_error("lat and lon must contain only numeric comma-separated values.", "html"))
+      return(html_error(res, 400, "lat and lon must contain only numeric comma-separated values."))
     }
     if (length(latv) != length(lonv)) {
-      res$status <- 400
-      return(handle_error("lat and lon must have the same number of comma-separated values.", "html"))
+      return(html_error(res, 400, "lat and lon must have the same number of comma-separated values."))
     }
   }
   area <- switch(
@@ -275,8 +302,7 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   )
 
   if (is.null(method) || is.null(area)) {
-    res$status <- 400
-    return(handle_error("You must provide valid coordinates, a shape, or a FIPS code.", "html"))
+    return(html_error(res, 400, "You must provide valid coordinates, a shape, or a FIPS code."))
   }
 
   # Normalize sitenumber. 0 or "overall" -> aggregate multisite report
@@ -287,15 +313,12 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   # Perform the EJAM analysis.
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint="report"),
-    error = function(e) {
-      res$status <- 400
-      handle_error(e$message, "html")
-    }
+    error = function(e) e
   )
-  
-  # If an error occurred during the analysis, return the error message.
-  if (is.character(result)) {
-    return(result)
+
+  # If an error occurred during the analysis, return it as an HTML page.
+  if (inherits(result, "error")) {
+    return(html_error(res, 400, conditionMessage(result)))
   }
   
   # Get submitted polygon shape(s) to appear in report map.
@@ -326,8 +349,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
   # One method per analysis; require exactly one input so an ambiguous request
   # (e.g. both sites and fips) fails cleanly instead of silently picking one.
   if (sum(!is.null(sites), !is.null(shape), !is.null(fips)) != 1) {
-    res$status <- 400
-    return(handle_error("Provide exactly one of sites, shape, or fips.", "html"))
+    return(html_error(res, 400, "Provide exactly one of sites, shape, or fips."))
   }
   method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   area <- sites %||% shape %||% fips
@@ -338,13 +360,10 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint = "report"),
-    error = function(e) {
-      res$status <- 400
-      handle_error(e$message, "html")
-    }
+    error = function(e) e
   )
-  if (is.character(result)) {
-    return(result)
+  if (inherits(result, "error")) {
+    return(html_error(res, 400, conditionMessage(result)))
   }
 
   # Submitted polygon(s) to appear in the report map.
