@@ -102,6 +102,28 @@ df = pandas.DataFrame.from_dict(response.json())
 df
 ```
 
+## Query
+`query` accepts POST requests with the following parameters:
+- `attribute` - an EJSCREEN attribute in EJAM syntax, such as `pctlowinc` or `pctunemployed`
+- `value` - a decimal cutoff from 0 to 1; numeric-like strings are coerced and invalid values are rejected
+
+`query` returns a JSON object of EJAM output. Responses are limited to 100 rows per request. If the limit is reached, the response includes a `message` and a `results` field containing the first 100 rows.
+
+### Examples
+```
+data = {"attribute": "pctlowinc", "value": 0.95}
+
+# Execute query
+import requests
+url = "https://ejamapi-84652557241.us-central1.run.app/query"
+response = requests.post(url, json=data)
+
+# Load response as Pandas dataframe
+payload = response.json()
+df = pandas.DataFrame.from_dict(payload["results"] if isinstance(payload, dict) and "results" in payload else payload)
+df
+```
+
 ## Handoff (launch the EJAM app pre-loaded)
 
 Two endpoints let an external app (e.g. EJScreen) hand a set of selected places to the full EJAM app without hitting URL-length limits (important for polygons):
