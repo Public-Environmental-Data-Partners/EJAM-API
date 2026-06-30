@@ -6,6 +6,18 @@ library(geojsonsf)
 library(jsonlite)
 library(sf)
 
+############################# #
+#* @apiTitle API for EJAM / EJSCREEN Data, Analysis, and Reports
+#*
+#* @apiDescription EJSCREEN provides environmental justice screening and mapping.
+#* EJSCREEN's Multisite Tool is called EJAM (Environmental Justice Analysis Multisite).
+#* For information about EJSCREEN, see <https://public-environmental-data-partners.github.io/EJAM/articles/ejscreen.html>.
+#* For technical documentation on EJAM (software powering the API) see
+#* <https://ejanalysis.org/ejamdocs>.
+#* For information on the API itself, see
+#* <https://github.com/Public-Environmental-Data-Partners/EJAM-API#ejam-api>
+############################# #
+
 # Centralized error handling function
 handle_error <- function(message, type = "json") {
   if (type == "html") {
@@ -98,6 +110,21 @@ function(req, res) {
   plumber::forward()
 }
 
+# ________________________________ ####
+# Docs ####
+
+#* Redirect the API root to the interactive documentation page, so visiting the
+#* base URL (no endpoint or parameters) shows the Swagger UI.
+#* @tag Docs
+#* @get /
+function(res) {
+  res$status <- 302L
+  res$setHeader("Location", "/__docs__/")
+  list()
+}
+
+# /data ####
+
 #* Return EJAM analysis data as JSON based on geography
 #* @tag Data
 #* @param sites A data frame of site coordinates (lat/lon)
@@ -147,6 +174,8 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, geo
   }
 }
 
+# /query ####
+
 #* Return EJAM analysis data as JSON based on attribute query
 #* @tag Data
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
@@ -162,6 +191,8 @@ function(attribute = "pctunemployed", value=.9, res) {
   results <- blockgroupstats[these,]
   return (results)
 }
+
+# /report ####
 
 # Render an ejamit() result as an EJAM report and write it to the plumber
 # response as HTML or PDF. Shared by GET /report (one value per param) and
@@ -287,10 +318,10 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
-#* @param fileextension "html" (default) or "pdf"
+#* @param fileextension "pdf" (default) or "html"
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
-function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "html", res) {
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "pdf", res) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # One method per analysis; require exactly one input so an ambiguous request
   # (e.g. both sites and fips) fails cleanly instead of silently picking one.
@@ -433,6 +464,10 @@ function(token, res) {
   unserialize(entry$payload_raw)
 }
 
-#* Serve static assets from the ./assets directory
-#* @assets ./assets /
+# /assets ####
+
+#* Serve static assets from the ./assets directory at /assets.
+#* NOTE: do NOT mount at root "/", which shadows plumber's OpenAPI/Swagger
+#* docs UI at /__docs__/ and makes the documentation page return 404.
+#* @assets ./assets /assets
 list()

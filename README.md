@@ -17,7 +17,13 @@ A friendlier branded base is also available now and proxies the **same** API thr
 
 All of the example URLs below work with either base — just swap the host. For example, `https://api.ejanalysis.com/report?buffer=1&fips=10001` is equivalent to the Cloud Run URL. (The EJAM R package reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION`, so it can point at either base; see `?url_package` and `?url_ejamapi` in EJAM.)
 
+Visiting a base URL with no path (e.g. `https://api.ejanalysis.com/`) redirects to this repo's interactive API documentation page (`/__docs__/`).
+
 ## Reports
+
+The `report` endpoint returns a PDF or HTML report for one or more sites specified by
+point, area (polygon), or FIPS geography.
+
 `report` accepts GET requests with the following parameters:
 - `lat` - the latitude of a given point, or comma-separated list like lat=33,32.5
 - `lon` - the longitude
@@ -44,7 +50,7 @@ A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652
 
 `report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, or `fips` per request, plus:
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site.
-- `fileextension` - `html` (default) or `pdf`.
+- `fileextension` - `pdf` (default) or `html`.
 
 Each `fips` code is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
 
@@ -56,6 +62,9 @@ html = requests.post("https://ejamapi-84652557241.us-central1.run.app/report", j
 ```
 
 ## Data
+
+The `data` endpoint returns a JSON object of EJAM output for a given point, area, or FIPS geography.
+
 `data` accepts POST requests with the following parameters:
 - `sites` - a list of lat/lon pairs e.g. `[{"lat":33, "lon":-112}, {"lat":34, "lon":-114}]`
 - `shape` - a GeoJSON object describing an area of interest, such as a polygon of neighborhood boundaries
@@ -107,12 +116,27 @@ The caller opens the EJAM app at `https://ejam.publicenvirodata.org/?handoff=<to
 
 All routes send `Access-Control-Allow-Origin: *` and answer `OPTIONS` preflight requests, so browser apps can `fetch()`/POST cross-origin (needed for `/handoff` and any future POST report endpoint). The single-site report flow uses a top-level `window.open()` GET and does not depend on CORS.
 
+## Assets
+
+An assets endpoint returns a file from a pre-defined set of assets. The endpoint is structured as `/assets/<asset_name>`, 
+where `<asset_name>` is the name of the asset file. 
+For example, to retrieve a specific asset, you would make a GET request to `/assets/example_asset.pdf`.
+
 # Set-up
 1. Work locally with EJAM by installing R/RStudio. Follow the [installation instructions](https://ejanalysis.github.io/EJAM/articles/installing.html) in the [EJAM documentation](https://ejanalysis.org/ejamdocs).
 2. Test changes to the API (i.e. modify `rest_controller.r`)
-3. Re-build and tag the Docker image
+3. Re-build and tag the Docker image (the EJAM version is controlled by the `EJAM_VERSION` build arg — see below)
 4. Push to Docker Hub and/or Google Artifact Registry
 5. Re-deploy in Google Cloud Run
+
+## Choosing the EJAM version
+
+The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v2.32.8.1`, matching the version the image currently deploys). This value is passed directly to `git clone --branch`, so it must be a valid git ref — typically a tag like `v2.32.8.1` (include the leading `v`), though a branch name such as `development` also works (see below). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
+
+- **Override at build time** (no Dockerfile edit), e.g. `docker build --build-arg EJAM_VERSION=v3.2022.0 .` or `docker build --build-arg EJAM_VERSION=v3.2023.0 .`
+- **Deploy from a branch** instead of a tagged release: pass the branch name with no leading `v`, e.g. `docker build --build-arg EJAM_VERSION=development .`. A branch is a moving target but the `git clone` image layer is cached, so a plain rebuild may reuse an earlier clone of that branch — add `--no-cache` to force a fresh pull of the current branch tip: `docker build --no-cache --build-arg EJAM_VERSION=development .`. (Tagged releases are immutable, so their cached layer is always correct.)
+- **Control it at the repo level:** set a GitHub Actions repository variable named `EJAM_VERSION` (Settings → Secrets and variables → Actions → Variables), and have the image-build step pass it through with `--build-arg EJAM_VERSION=${{ vars.EJAM_VERSION }}`. (This repo currently builds the image manually per the steps above; that variable is consumed automatically once an image-build workflow is added.)
+- The selected version is also recorded in the image as the `EJAM_VERSION` environment variable, so the running API can report which EJAM release it was built with.
 
 ---
 
