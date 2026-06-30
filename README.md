@@ -6,16 +6,17 @@ In February 2025, USEPA removed its EJSCREEN website from public access, includi
 Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently provide an API; this repo contains files necessary to create a Docker image of EJAM and its dependencies as well as an API model.
 
 # Model
-The API exposes report and data endpoints, plus a token-based handoff for launching the EJAM app pre-loaded.
+The API exposes report and data endpoints, plus a token-based handoff for launching the [EJAM app](https://ejanalysis.org/ejamapp) pre-loaded with sites already specified as parameters.
 
 ## Base URLs
 The canonical base URL is the Cloud Run service:
 `https://ejamapi-84652557241.us-central1.run.app`
 
-A friendlier branded base is also available now and proxies the **same** API through Cloudflare (with permissive CORS for browser apps):
-`https://api.ejanalysis.com` (and the equivalent alias `https://ejamapi.ejanalysis.com`)
+A friendlier base URL is also available now and proxies the **same** API through Cloudflare (with permissive CORS for browser apps):
+`https://api.ejanalysis.com` (and the alias `https://ejamapi.ejanalysis.com`)
 
-All of the example URLs below work with either base — just swap the host. For example, `https://api.ejanalysis.com/report?buffer=1&fips=10001` is equivalent to the Cloud Run URL. (The EJAM R package reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION`, so it can point at either base; see `?url_package` and `?url_ejamapi` in EJAM.)
+All of the example URLs below work with either base. For example, `https://api.ejanalysis.com/report?fips=10001` is equivalent to using the Cloud Run URL.
+The [EJAM R package](https://ejanalysis.org/ejamdocs) reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION` file, so it can point at either base; see `?url_package` and [url_ejamapi](https://public-environmental-data-partners.github.io/EJAM/reference/url_ejamapi.html) in EJAM.
 
 Visiting a base URL with no path (e.g. `https://api.ejanalysis.com/`) redirects to this repo's interactive API documentation page (`/__docs__/`).
 
