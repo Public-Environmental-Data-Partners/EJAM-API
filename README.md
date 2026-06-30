@@ -36,13 +36,13 @@ point, area (polygon), or FIPS geography.
 `report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. With `fileextension=html`, an HTML report is returned; otherwise a PDF.
 
 ### Examples
-A County: https://ejamapi-84652557241.us-central1.run.app/report?buffer=1&fips=10001
+A report on one county: https://api.ejanalysis.com/report?fips=10001
 
-A point in the Phoenix area with a 4 mile buffer (radius): https://ejamapi-84652557241.us-central1.run.app/report?lat=33&lon=-112&buffer=4
+A report on residents within a 1 mile radius (buffer) of one point in the Phoenix area: https://api.ejanalysis.com/report?lat=33&lon=-112&buffer=1
 
-A multisite report over two points: https://ejamapi-84652557241.us-central1.run.app/report?lat=33,34&lon=-112,-114&buffer=3&sitenumber=0&fileextension=html
+A multisite report over two points, 3 mile radius, as pdf: https://ejamapi-84652557241.us-central1.run.app/report?lat=33,34&lon=-112,-114&buffer=3&sitenumber=0&fileextension=pdf
 
-A multisite report over two counties: https://ejamapi-84652557241.us-central1.run.app/report?fips=10001,10003&sitenumber=0&fileextension=html
+A multisite report over two counties, as html: https://ejamapi-84652557241.us-central1.run.app/report?fips=10001,10003&sitenumber=0&fileextension=html
 
 A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652557241.us-central1.run.app/report?shape=%7B"type"%3A"FeatureCollection"%2C"features"%3A%5B%7B"type"%3A"Feature"%2C"properties"%3A%7B%7D%2C"geometry"%3A%7B"coordinates"%3A%5B%5B%5B-112.01991856401462%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.51124624304089%5D%5D%5D%2C"type"%3A"Polygon"%7D%7D%5D%7D&buffer=0
 
