@@ -6,6 +6,18 @@ library(geojsonsf)
 library(jsonlite)
 library(sf)
 
+############################# #
+#* @apiTitle API for EJAM / EJSCREEN Data, Analysis, and Reports
+#*
+#* @apiDescription EJSCREEN provides environmental justice screening and mapping.
+#* EJSCREEN's Multisite Tool is called EJAM (Environmental Justice Analysis Multisite).
+#* For information about EJSCREEN, see <https://public-environmental-data-partners.github.io/EJAM/articles/ejscreen.html>.
+#* For technical documentation on EJAM (software powering the API) see
+#* <https://ejanalysis.org/ejamdocs>.
+#* For information on the API itself, see
+#* <https://github.com/Public-Environmental-Data-Partners/EJAM-API#ejam-api>
+############################# #
+
 # Centralized error handling function
 handle_error <- function(message, type = "json") {
   if (type == "html") {
@@ -24,14 +36,14 @@ fipper <- function(area, scale = "blockgroup") {
       return(area)
     }
   )
-  
+
   # Determine the type of the provided FIPS code.
   fips_type <- fipstype(fips_area)[1]
-  
+
   if (fips_type == scale) {
     return(fips_area)
   }
-  
+
   # Convert the FIPS code to the desired scale.
   switch(scale,
          "county" = fips_counties_from_statefips(fips_area),
@@ -47,7 +59,7 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
   if (!is.numeric(buffer) || buffer > 15) {
     stop("Please select a buffer of 15 miles or less.")
   }
-  
+
   # Process the request based on the specified method.
   switch(method,
          "latlon" = {
@@ -77,6 +89,8 @@ ejamit_interface <- function(area, method, buffer = 0, scale = "blockgroup", end
          stop("Invalid method specified.") # Handle unrecognized methods.
   )
 }
+# ________________________________ ####
+# /data ####
 
 #* Return EJAM analysis data as JSON based on geography
 #* @param sites A data frame of site coordinates (lat/lon)
@@ -90,12 +104,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
   # Determine the input method.
   method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
   area <- sites %||% shape %||% fips
-  
+
   if (is.null(method) || is.null(area)) {
     res$status <- 400
     return(handle_error("You must provide valid points, a shape, or a FIPS code."))
   }
-  
+
   # Perform the EJAM analysis.
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), scale = scale, endpoint = "data"),
@@ -104,12 +118,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
       handle_error(e$message)
     }
   )
-  
+
   # If an error was returned from the interface, return it.
   if ("error" %in% names(result)) {
     return(result)
   }
-  
+
   # Prepare the final JSON output.
   if (geometries) {
     output_shape <- switch(method,
@@ -123,6 +137,8 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, geometries = FALSE
     return(result$results_bysite)
   }
 }
+
+# /query ####
 
 #* Return EJAM analysis data as JSON based on attribute query
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
@@ -139,6 +155,8 @@ function(attribute = "pctunemployed", value=.9, res) {
   return (results)
 }
 
+# /report ####
+
 #* Generate an EJAM report
 #* @param lat Latitude of the site
 #* @param lon Longitude of the site
@@ -153,12 +171,12 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
   area <- if (method == "latlon") data.frame(lat = as.numeric(lat), lon = as.numeric(lon)) else shape %||% fips
-  
+
   if (is.null(method) || is.null(area)) {
     res$status <- 400
     return(handle_error("You must provide valid coordinates, a shape, or a FIPS code.", "html"))
   }
-  
+
   # Perform the EJAM analysis.
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint="report"),
@@ -167,13 +185,13 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
       handle_error(e$message, "html")
     }
   )
-  
+
   # If an error occurred during the analysis, return the error message.
   if (is.character(result)) {
     return(result)
   }
-  
-  # Get submitted polygon shape to appear in report map.
+
+  # Get submitted polygon shape(s) to appear in report map.
   to_map<-NULL # Clear any previous maps
   if (method == "SHP"){
     to_map<-geojson_sf(area) # TBD: get this returned from ejamit_interface
@@ -189,22 +207,22 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
     res$setHeader("Content-Type", "text/html")
     res$body <- report_output
     return(res)
-  } 
-  
+  }
+
   if (ext == "pdf") {
     # If report_output is a file path, we read it as RAW binary
     if (is.character(report_output) && file.exists(report_output)) {
-      
+
       res$setHeader("Content-Type", "application/pdf")
       res$setHeader("Content-Disposition", "inline; filename=ejscreen_report.pdf")
-      
+
       # Read the file as raw binary data to avoid 'embedded nul' issues
       file_size <- file.info(report_output)$size
       res$body <- readBin(report_output, "raw", n = file_size)
-      
+
       # Clean up the temp file after reading it into memory
       on.exit(unlink(report_output), add = TRUE)
-      
+
       return(res)
     } else {
       # If ejam2report already returned raw bytes, just pass them through
@@ -214,6 +232,8 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, sitenumb
     }
   }
 }
+
+# /assets ####
 
 #* Serve static assets from the ./assets directory at /assets.
 #* NOTE: do NOT mount at root "/", which shadows plumber's OpenAPI/Swagger
