@@ -106,12 +106,18 @@ df
 `query` accepts POST requests with the following parameters:
 - `attribute` - an EJSCREEN attribute in EJAM syntax, such as `pctlowinc` or `pctunemployed`
 - `value` - a decimal cutoff from 0 to 1; numeric-like strings are coerced and invalid values are rejected
+- `page` - a positive whole-number page to return. Default = 1
+- `limit` - rows per page. Default = 100; maximum = 500
 
-`query` returns a JSON object of EJAM output. Responses are limited to 100 rows per request. If the limit is reached, the response includes a `message` and a `results` field containing the first 100 rows.
+`query` returns a JSON object with:
+- `results` - the EJAM output rows for the requested page
+- `pagination` - metadata with `page`, `limit`, `total_rows`, `total_pages`, `returned_rows`, `has_next_page`, and `has_previous_page`
+
+Pagination is 1-based. For example, with `limit = 100`, `page = 2` returns rows 101-200 from the query results. If `page` is beyond the available results, `results` is empty and `pagination` still reports the total row and page counts.
 
 ### Examples
 ```
-data = {"attribute": "pctlowinc", "value": 0.95}
+data = {"attribute": "pctlowinc", "value": 0.95, "page": 1, "limit": 100}
 
 # Execute query
 import requests
@@ -120,8 +126,12 @@ response = requests.post(url, json=data)
 
 # Load response as Pandas dataframe
 payload = response.json()
-df = pandas.DataFrame.from_dict(payload["results"] if isinstance(payload, dict) and "results" in payload else payload)
+df = pandas.DataFrame.from_dict(payload["results"])
 df
+
+# Request the next page
+data["page"] = payload["pagination"]["page"] + 1
+response = requests.post(url, json=data)
 ```
 
 ## Handoff (launch the EJAM app pre-loaded)
