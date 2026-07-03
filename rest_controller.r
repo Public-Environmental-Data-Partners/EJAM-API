@@ -247,10 +247,8 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
   # release, so GET responses are marked edge-cacheable (the Cloudflare proxy
   # at api.ejanalysis.com can then serve repeat requests instantly instead of
   # recomputing for 13-45+ seconds). POST responses pass cache_header = NULL
-  # and are never cached.
-  if (!is.null(cache_header)) {
-    res$setHeader("Cache-Control", cache_header)
-  }
+  # and get an explicit no-store so no intermediary caches them.
+  res$setHeader("Cache-Control", if (is.null(cache_header)) "no-store" else cache_header)
 
   if (ext == "html") {
     res$setHeader("Content-Type", "text/html")
