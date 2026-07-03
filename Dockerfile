@@ -83,6 +83,33 @@ RUN MAKEFLAGS="-j$(nproc)" R -e " \
     # Clean up the cloned source directory \
     rm -rf /EJAM_src
 
+# Bake the EJAM arrow datasets (~1 GB) into the image so containers do NOT
+# download them from GitHub at every cold start. library(EJAM) here triggers
+# the exact .onAttach download that would otherwise run at container startup;
+# it saves the files into the installed package's data folder and writes the
+# data/ejamdata_version.txt marker, so the runtime attach finds everything
+# up-to-date and skips all downloads (measured: this download is the dominant
+# cold-start cost -- see Public-Environmental-Data-Partners/EJAM#293).
+# Needs network during build; downloads are unauthenticated. If the build
+# machine is GitHub-rate-limited, pass a token as a BuildKit secret (NOT a
+# build arg or ENV, so it is never baked into an image layer):
+#   docker build --secret id=github_pat,env=GITHUB_PAT ...
+# (Requires BuildKit -- the default builder in Docker 23+, or DOCKER_BUILDKIT=1.
+# The secret is optional: without it the download runs unauthenticated as before.)
+# The build FAILS if the files or the version marker did not land. The check
+# requires the version marker plus at least one arrow file (not a hardcoded
+# count, which would break when a data release changes how files are sharded).
+RUN --mount=type=secret,id=github_pat \
+    if [ -f /run/secrets/github_pat ]; then export GITHUB_PAT="$(cat /run/secrets/github_pat)"; fi; \
+    R -e " \
+    library(EJAM); \
+    dd <- system.file('data', package = 'EJAM'); \
+    arrows <- list.files(dd, pattern = '[.]arrow\$'); \
+    marker <- file.exists(file.path(dd, 'ejamdata_version.txt')); \
+    cat('arrow files baked into image:', length(arrows), '| version marker present:', marker, '\n'); \
+    if (length(arrows) < 1 || !marker) stop('DATA BAKE FAILED: arrow files or version marker missing'); \
+    "
+
 # Reset frontend
 ENV DEBIAN_FRONTEND=dialog
 

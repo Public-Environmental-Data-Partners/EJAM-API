@@ -51,6 +51,9 @@ handle_error <- function(message, type = "json") {
 html_error <- function(res, status, message) {
   res$status <- status
   res$setHeader("Content-Type", "text/html")
+  # Never let an error page be cached at the edge (successful GET /report
+  # responses are cacheable -- see report_response()).
+  res$setHeader("Cache-Control", "no-store")
   res$body <- handle_error(message, "html")
   res
 }
@@ -228,16 +231,24 @@ function(attribute = "pctunemployed", value=.9, res) {
 # POST /report (JSON body; supports many/large polygons and mixed/large sets).
 # report_title is intentionally left unset so ejam2report() picks the correct
 # header by sitenumber ("EJSCREEN Community Report" vs "EJSCREEN Multisite Summary").
-report_response <- function(result, method, to_map, sitenum, ext, res) {
+report_response <- function(result, method, to_map, sitenum, ext, res, cache_header = NULL) {
   ext <- tolower(ext)
   if (!ext %in% c("html", "pdf")) {
     res$status <- 400
     res$setHeader("Content-Type", "text/html")
+    res$setHeader("Cache-Control", "no-store")
     res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
     return(res)
   }
   report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
     launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+
+  # Successful reports are deterministic for a given URL + deployed data
+  # release, so GET responses are marked edge-cacheable (the Cloudflare proxy
+  # at api.ejanalysis.com can then serve repeat requests instantly instead of
+  # recomputing for 13-45+ seconds). POST responses pass cache_header = NULL
+  # and get an explicit no-store so no intermediary caches them.
+  res$setHeader("Cache-Control", if (is.null(cache_header)) "no-store" else cache_header)
 
   if (ext == "html") {
     res$setHeader("Content-Type", "text/html")
@@ -342,7 +353,11 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   }
 
   # Generate and return the report (HTML or PDF). See report_response() above.
-  report_response(result, method, to_map, sitenum, tolower(fileextension), res)
+  # GET responses are cacheable (deterministic per URL + data release); 1 day
+  # keeps repeat clicks fast while limiting staleness after a redeploy. (Purge
+  # the Cloudflare cache, or bump the data release, when redeploying.)
+  report_response(result, method, to_map, sitenum, tolower(fileextension), res,
+                  cache_header = "public, max-age=86400")
 }
 
 #* Generate an EJAM report from a POST body (supports many/large polygons and mixed/large site sets).
