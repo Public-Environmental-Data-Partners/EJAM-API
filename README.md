@@ -32,9 +32,9 @@ point, area (polygon), or FIPS geography.
 - `shape` - a GeoJSON text-encoded object describing an area of interest, such as a polygon of neighborhood boundaries
 - `buffer` (or `radius`, a synonym) - radius, in miles, around a point or out from the edge of a polygon to extend the search. EJAM default = 3. *Note: adding buffers around fips units may not be implemented yet.
 - `sitenumber` - which site to report on when more than one is supplied. Default = 1 (a single-site report on the first site). Use `sitenumber=0` (or `sitenumber=overall`) to get an aggregate **multisite report** that summarizes all of the supplied sites together. Each comma-separated `fips` code is treated as a separate site (no expansion), so `fips=10001,10003&sitenumber=0` reports on those two counties together.
-- `fileextension` - `pdf` (default) or `html`.
+- `fileextension` - `html` or `pdf`. Default if omitted: `pdf` for a single-site report (better page breaks when printing), `html` for a multisite report (`sitenumber=0`/`overall`) -- HTML is generated much faster, and its interactive map lets you click any site's point to open that site's own report.
 
-`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. With `fileextension=html`, an HTML report is returned; otherwise a PDF.
+`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
 ### Examples
 A report on one county: https://api.ejanalysis.com/report?fips=10001
@@ -51,7 +51,7 @@ A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652
 
 `report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, or `fips` per request, plus:
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site.
-- `fileextension` - `pdf` (default) or `html`.
+- `fileextension` - `html` or `pdf`; default if omitted: `html` for the (default) multisite report, `pdf` when a single `sitenumber` is chosen.
 
 Each `fips` code is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
 
