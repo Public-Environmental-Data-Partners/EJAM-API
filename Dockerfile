@@ -83,6 +83,25 @@ RUN MAKEFLAGS="-j$(nproc)" R -e " \
     # Clean up the cloned source directory \
     rm -rf /EJAM_src
 
+# Bake the EJAM arrow datasets (~1 GB) into the image so containers do NOT
+# download them from GitHub at every cold start. library(EJAM) here triggers
+# the exact .onAttach download that would otherwise run at container startup;
+# it saves the files into the installed package's data folder and writes the
+# data/ejamdata_version.txt marker, so the runtime attach finds everything
+# up-to-date and skips all downloads (measured: this download is the dominant
+# cold-start cost -- see Public-Environmental-Data-Partners/EJAM#293).
+# Needs network during build; downloads are unauthenticated (fine from a build
+# machine; export GITHUB_PAT in the build environment only if rate-limited).
+# The build FAILS if the files or the version marker did not land.
+RUN R -e " \
+    library(EJAM); \
+    dd <- system.file('data', package = 'EJAM'); \
+    arrows <- list.files(dd, pattern = '[.]arrow\$'); \
+    marker <- file.exists(file.path(dd, 'ejamdata_version.txt')); \
+    cat('arrow files baked into image:', length(arrows), '| version marker present:', marker, '\n'); \
+    if (length(arrows) < 11 || !marker) stop('DATA BAKE FAILED: arrow files or version marker missing'); \
+    "
+
 # Reset frontend
 ENV DEBIAN_FRONTEND=dialog
 
