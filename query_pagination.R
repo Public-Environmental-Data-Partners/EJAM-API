@@ -9,6 +9,7 @@ query_positive_whole_number <- function(x, name, max_value = NULL) {
     !is.finite(x) ||
     x < 1 ||
     x != floor(x) ||
+    x > .Machine$integer.max ||
     (!is.null(max_value) && x > max_value)
   ) {
     if (!is.null(max_value)) {
@@ -51,7 +52,7 @@ paginate_query_results <- function(
       total_pages = as.integer(total_pages),
       returned_rows = as.integer(nrow(paginated_results)),
       has_next_page = page < total_pages,
-      has_previous_page = page > 1L
+      has_previous_page = total_pages > 0L && page > 1L
     )
   )
 }

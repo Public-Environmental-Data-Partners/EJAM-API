@@ -33,6 +33,17 @@ test_that("query pagination returns an empty page beyond available results", {
   expect_true(payload$pagination$has_previous_page)
 })
 
+test_that("query pagination metadata is consistent for empty result sets", {
+  payload <- paginate_query_results(sample_results[0, ], page = 2, limit = 5)
+
+  expect_equal(nrow(payload$results), 0L)
+  expect_equal(payload$pagination$total_rows, 0L)
+  expect_equal(payload$pagination$total_pages, 0L)
+  expect_equal(payload$pagination$returned_rows, 0L)
+  expect_false(payload$pagination$has_next_page)
+  expect_false(payload$pagination$has_previous_page)
+})
+
 test_that("query pagination validates page and limit inputs", {
   expect_error(
     paginate_query_results(sample_results, page = 0, limit = 5),
@@ -46,6 +57,11 @@ test_that("query pagination validates page and limit inputs", {
   )
   expect_error(
     paginate_query_results(sample_results, page = 1.5, limit = 5),
+    "page must be a positive whole number",
+    fixed = TRUE
+  )
+  expect_error(
+    paginate_query_results(sample_results, page = .Machine$integer.max + 1, limit = 5),
     "page must be a positive whole number",
     fixed = TRUE
   )

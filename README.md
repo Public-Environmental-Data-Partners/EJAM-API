@@ -121,6 +121,7 @@ data = {"attribute": "pctlowinc", "value": 0.95, "page": 1, "limit": 100}
 
 # Execute query
 import requests
+import pandas
 url = "https://ejamapi-84652557241.us-central1.run.app/query"
 response = requests.post(url, json=data)
 
