@@ -32,9 +32,9 @@ point, area (polygon), or FIPS geography.
 - `shape` - a GeoJSON text-encoded object describing an area of interest, such as a polygon of neighborhood boundaries
 - `buffer` (or `radius`, a synonym) - radius, in miles, around a point or out from the edge of a polygon to extend the search. EJAM default = 3. *Note: adding buffers around fips units may not be implemented yet.
 - `sitenumber` - which site to report on when more than one is supplied. Default = 1 (a single-site report on the first site). Use `sitenumber=0` (or `sitenumber=overall`) to get an aggregate **multisite report** that summarizes all of the supplied sites together. Each comma-separated `fips` code is treated as a separate site (no expansion), so `fips=10001,10003&sitenumber=0` reports on those two counties together.
-- `fileextension` - `pdf` (default) or `html`.
+- `fileextension` - `html` or `pdf`. Default if omitted: `pdf` for a single-site report (better page breaks when printing), `html` for a multisite report (`sitenumber=0`/`overall`) -- HTML is generated much faster, and its interactive map lets you click any site's point to open that site's own report.
 
-`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. With `fileextension=html`, an HTML report is returned; otherwise a PDF.
+`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
 ### Examples
 A report on one county: https://api.ejanalysis.com/report?fips=10001
@@ -51,7 +51,7 @@ A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652
 
 `report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, or `fips` per request, plus:
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site.
-- `fileextension` - `pdf` (default) or `html`.
+- `fileextension` - `html` or `pdf`; default if omitted: `html` for the (default) multisite report, `pdf` when a single `sitenumber` is chosen.
 
 Each `fips` code is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
 
@@ -164,9 +164,9 @@ For example, to retrieve a specific asset, you would make a GET request to `/ass
 
 ## Choosing the EJAM version
 
-The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v2.32.8.1`, matching the version the image currently deploys). This value is passed directly to `git clone --branch`, so it must be a valid git ref — typically a tag like `v2.32.8.1` (include the leading `v`), though a branch name such as `development` also works (see below). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
+The version of the [EJAM](https://github.com/Public-Environmental-Data-Partners/EJAM) package baked into the image is set in **one place**: the `EJAM_VERSION` build argument in the [`Dockerfile`](/Dockerfile) (default `v3.2022.1`, the current recommended EJAM release). This value is passed directly to `git clone --branch`, so it must be a valid git ref — typically a tag like `v3.2022.1` (include the leading `v`), though a branch name such as `development` also works (see below). That's the only line to change when bumping versions — the clone uses a fixed scratch directory (`/EJAM_src`), so the version no longer has to be repeated across the clone, install, and cleanup steps.
 
-- **Override at build time** (no Dockerfile edit), e.g. `docker build --build-arg EJAM_VERSION=v3.2022.0 .` or `docker build --build-arg EJAM_VERSION=v3.2023.0 .`
+- **Override at build time** (no Dockerfile edit), e.g. `docker build --build-arg EJAM_VERSION=v3.2022.1 .` or `docker build --build-arg EJAM_VERSION=v3.2023.0 .`
 - **Deploy from a branch** instead of a tagged release: pass the branch name with no leading `v`, e.g. `docker build --build-arg EJAM_VERSION=development .`. A branch is a moving target but the `git clone` image layer is cached, so a plain rebuild may reuse an earlier clone of that branch — add `--no-cache` to force a fresh pull of the current branch tip: `docker build --no-cache --build-arg EJAM_VERSION=development .`. (Tagged releases are immutable, so their cached layer is always correct.)
 - **Control it at the repo level:** set a GitHub Actions repository variable named `EJAM_VERSION` (Settings → Secrets and variables → Actions → Variables), and have the image-build step pass it through with `--build-arg EJAM_VERSION=${{ vars.EJAM_VERSION }}`. (This repo currently builds the image manually per the steps above; that variable is consumed automatically once an image-build workflow is added.)
 - The selected version is also recorded in the image as the `EJAM_VERSION` environment variable, so the running API can report which EJAM release it was built with.

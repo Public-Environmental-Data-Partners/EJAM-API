@@ -53,6 +53,9 @@ handle_error <- function(message, type = "json") {
 html_error <- function(res, status, message) {
   res$status <- status
   res$setHeader("Content-Type", "text/html")
+  # Never let an error page be cached at the edge (successful GET /report
+  # responses are cacheable -- see report_response()).
+  res$setHeader("Cache-Control", "no-store")
   res$body <- handle_error(message, "html")
   res
 }
@@ -233,16 +236,24 @@ function(attribute = "pctunemployed", value = .9, page = 1, limit = QUERY_DEFAUL
 # POST /report (JSON body; supports many/large polygons and mixed/large sets).
 # report_title is intentionally left unset so ejam2report() picks the correct
 # header by sitenumber ("EJSCREEN Community Report" vs "EJSCREEN Multisite Summary").
-report_response <- function(result, method, to_map, sitenum, ext, res) {
+report_response <- function(result, method, to_map, sitenum, ext, res, cache_header = NULL) {
   ext <- tolower(ext)
   if (!ext %in% c("html", "pdf")) {
     res$status <- 400
     res$setHeader("Content-Type", "text/html")
+    res$setHeader("Cache-Control", "no-store")
     res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
     return(res)
   }
   report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
     launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+
+  # Successful reports are deterministic for a given URL + deployed data
+  # release, so GET responses are marked edge-cacheable (the Cloudflare proxy
+  # at api.ejanalysis.com can then serve repeat requests instantly instead of
+  # recomputing for 13-45+ seconds). POST responses pass cache_header = NULL
+  # and get an explicit no-store so no intermediary caches them.
+  res$setHeader("Cache-Control", if (is.null(cache_header)) "no-store" else cache_header)
 
   if (ext == "html") {
     res$setHeader("Content-Type", "text/html")
@@ -273,10 +284,10 @@ report_response <- function(result, method, to_map, sitenum, ext, res) {
 #* @param buffer The buffer radius in miles
 #* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites.
-#* @param fileextension Whether to return a PDF or HTML file. Defaults to PDF.
+#* @param fileextension "html" or "pdf". Default if omitted: pdf for a single-site report (better page breaks when printing), html for a multisite report (sitenumber=0/overall) -- html is much faster to generate and its interactive map links each site to its own report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
-function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius = NULL, sitenumber=1, fileextension="pdf", res) {
+function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius = NULL, sitenumber=1, fileextension = NULL, res) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
@@ -315,6 +326,19 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
   if (is.na(sitenum)) sitenum <- 1
 
+  # Default report format (when fileextension is not specified) mirrors the
+  # EJAM package's report links (Public-Environmental-Data-Partners/EJAM#443):
+  # - single-site report -> pdf: the traditional printable community report,
+  #   with proper page breaks for printing.
+  # - multisite report (sitenumber=0/overall) -> html: generated several times
+  #   faster (no headless-Chrome PDF steps), so the user gets the report much
+  #   sooner, and its interactive map lets the user click any site's point to
+  #   request that one site's report -- which a static PDF map cannot do.
+  # An explicitly passed fileextension always overrides this.
+  if (is.null(fileextension)) {
+    fileextension <- if (sitenum == 0) "html" else "pdf"
+  }
+
   # Perform the EJAM analysis.
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint="report"),
@@ -334,7 +358,11 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   }
 
   # Generate and return the report (HTML or PDF). See report_response() above.
-  report_response(result, method, to_map, sitenum, tolower(fileextension), res)
+  # GET responses are cacheable (deterministic per URL + data release); 1 day
+  # keeps repeat clicks fast while limiting staleness after a redeploy. (Purge
+  # the Cloudflare cache, or bump the data release, when redeploying.)
+  report_response(result, method, to_map, sitenum, tolower(fileextension), res,
+                  cache_header = "public, max-age=86400")
 }
 
 #* Generate an EJAM report from a POST body (supports many/large polygons and mixed/large site sets).
@@ -346,10 +374,10 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
-#* @param fileextension "pdf" (default) or "html"
+#* @param fileextension "html" or "pdf". Default if omitted: html for the (default) multisite report, pdf when a single sitenumber is chosen. See GET /report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
-function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = "pdf", res) {
+function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sitenumber = 0, fileextension = NULL, res) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # One method per analysis; require exactly one input so an ambiguous request
   # (e.g. both sites and fips) fails cleanly instead of silently picking one.
@@ -362,6 +390,14 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
   # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site.
   sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
   if (is.na(sitenum)) sitenum <- 0
+
+  # Default format mirrors GET /report (and Public-Environmental-Data-Partners/EJAM#443):
+  # html for the multisite report (much faster to generate; interactive map
+  # links each site to its own report), pdf for a single-site report (better
+  # page breaks when printing). Explicit fileextension always overrides.
+  if (is.null(fileextension)) {
+    fileextension <- if (sitenum == 0) "html" else "pdf"
+  }
 
   result <- tryCatch(
     ejamit_interface(area = area, method = method, buffer = as.numeric(buffer), endpoint = "report"),
