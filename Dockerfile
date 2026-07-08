@@ -15,6 +15,7 @@ RUN apt-get update && \
     libgdal-dev libgeos-dev libproj-dev libssl-dev libxml2-dev zlib1g-dev \
     libjq-dev libprotobuf-dev protobuf-compiler cmake libfontconfig1-dev \
     libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libwebp-dev \
+    libsqlite3-dev liblz4-dev libzstd-dev \
     libharfbuzz-dev libfribidi-dev libgit2-dev libssh2-1-dev && \
     wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
     apt-get install -y --no-install-recommends ./google-chrome-stable_current_amd64.deb && \
