@@ -36,10 +36,12 @@ point, area (polygon), or FIPS geography.
 
 `report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
+A single-site report needs residents to report on: if the analysis finds population 0 within the requested distance of the chosen site (e.g. a small buffer around a point in an unpopulated area), the endpoint returns an error page explaining that, rather than a report. Use a larger `buffer`, or `sitenumber=0` for an overall multisite summary, instead.
+
 ### Examples
 A report on one county: https://api.ejanalysis.com/report?fips=10001
 
-A report on residents within a 1 mile radius (buffer) of one point in the Phoenix area: https://api.ejanalysis.com/report?lat=33&lon=-112&buffer=1
+A report on residents within a 1 mile radius (buffer) of one point in downtown Phoenix: https://api.ejanalysis.com/report?lat=33.45&lon=-112.07&buffer=1
 
 A multisite report over two points, 3 mile radius, as pdf: https://ejamapi-84652557241.us-central1.run.app/report?lat=33,34&lon=-112,-114&buffer=3&sitenumber=0&fileextension=pdf
 
