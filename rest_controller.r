@@ -338,16 +338,22 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
 #* @param lon Longitude of the site
 #* @param shape A GeoJSON string representing the area of interest
 #* @param fips A FIPS code for a specific US Census geography
-#* @param buffer The buffer radius in miles
+#* @param buffer The buffer radius in miles. Default if omitted: 3 for lat/lon points; 0 for fips or shape (analyze inside the boundary itself, no buffer).
 #* @param radius Synonym for buffer.
 #* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites. When only ONE site is submitted (as in the per-site report links EJAM builds from multisite results), N > 1 is used to label the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1". (The "Site N" label requires an EJAM release whose ejam2report() has the sitenumber_label parameter -- EJAM#470; with an older pinned EJAM the report falls back to the default "Site 1" header.)
 #* @param fileextension "html" or "pdf". Default if omitted: pdf for a single-site report (better page breaks when printing), html for a multisite report (sitenumber=0/overall) -- html is much faster to generate and its interactive map links each site to its own report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
-function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius = NULL, sitenumber=1, fileextension = NULL, res) {
+function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = NULL, radius = NULL, sitenumber=1, fileextension = NULL, res) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
   # Determine the input method and prepare the area.
   method <- if (!is.null(lat) && !is.null(lon)) "latlon" else if (!is.null(shape)) "SHP" else if (!is.null(fips)) "FIPS" else NULL
+
+  # Buffer default depends on the method: points keep the traditional 3-mile
+  # ring (a bare point is not an area, so some buffer is required), while FIPS
+  # and polygon inputs are already areas -- their natural default is 0, meaning
+  # analyze inside the boundary itself with no buffer.
+  if (is.null(buffer)) {buffer <- if (identical(method, "latlon")) 3 else 0}
 
   # Multisite support: lat/lon and fips may be comma-separated lists, one site
   # each. Splitting here lets the same endpoint serve single-site (one value)
@@ -527,7 +533,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 #* @param sites Array of {lat, lon} site objects
 #* @param fips Array of FIPS codes (each one a separate site)
 #* @param shape A GeoJSON FeatureCollection of polygons
-#* @param radius Buffer radius in miles
+#* @param radius Buffer radius in miles. Default if omitted: 0 for FIPS or SHP handoffs (analyze inside the boundary itself, no buffer); no default for latlon (the EJAM app applies its own point default).
 #* @param buffer Synonym for radius.
 #* @post /handoff
 function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, buffer = NULL, res) {
@@ -540,6 +546,15 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   if (is.null(method)) {
     method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   }
+  # FIPS and polygon inputs are already areas, so their natural buffer default
+  # is 0 (analyze inside the boundary itself). Store the explicit 0 rather than
+  # leaving radius NULL: an absent field serializes as JSON {} in the GET
+  # /handoff/<token> payload, which clients can misparse (a zero-length list,
+  # not NULL, in R -- it crashed the EJAM app's launch handler; see
+  # Public-Environmental-Data-Partners/EJAM#465). Points get no default here:
+  # a bare point needs SOME positive buffer, and the EJAM app applies its own
+  # point-method default/minimum at the radius slider.
+  if (is.null(radius) && method %in% c("FIPS", "SHP")) {radius <- 0}
   if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
     res$status <- 429
     return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens). Retry after a short delay; tokens expire after 1 hour.", as.integer(.handoff_max_tokens))))

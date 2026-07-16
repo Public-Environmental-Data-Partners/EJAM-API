@@ -30,11 +30,11 @@ point, area (polygon), or FIPS geography.
 - `lon` - the longitude
 - `fips` - A FIPS code for a specific US Census geography, like fips=10 for one state, or comma-separated list like fips=10001,10003,10005 for 3 counties
 - `shape` - a GeoJSON text-encoded object describing an area of interest, such as a polygon of neighborhood boundaries
-- `buffer` (or `radius`, a synonym) - radius, in miles, around a point or out from the edge of a polygon to extend the search. EJAM default = 3. *Note: adding buffers around fips units may not be implemented yet.
+- `buffer` (or `radius`, a synonym) - radius, in miles, around a point or out from the edge of a polygon to extend the search. Default if omitted: 3 for `lat`/`lon` points; 0 for `fips` or `shape` (analyze inside the boundary itself, no buffer). *Note: adding buffers around fips units may not be implemented yet.
 - `sitenumber` - which site to report on when more than one is supplied. Default = 1 (a single-site report on the first site). Use `sitenumber=0` (or `sitenumber=overall`) to get an aggregate **multisite report** that summarizes all of the supplied sites together. Each comma-separated `fips` code is treated as a separate site (no expansion), so `fips=10001,10003&sitenumber=0` reports on those two counties together. When only **one** site is supplied (as in the per-site report links EJAM builds from multisite results), `sitenumber=N` with N > 1 labels the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1". (The "Site N" label requires the deployed `EJAM_VERSION` to include `ejam2report(sitenumber_label=)` from Public-Environmental-Data-Partners/EJAM#470; with an older pinned EJAM the report falls back to the default "Site 1" header.)
 - `fileextension` - `html` or `pdf`. Default if omitted: `pdf` for a single-site report (better page breaks when printing), `html` for a multisite report (`sitenumber=0`/`overall`) -- HTML is generated much faster, and its interactive map lets you click any site's point to open that site's own report.
 
-`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
+`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles; for `fips` or `shape` the default buffer is 0 (the boundary itself). Either can be set explicitly. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
 If the analysis finds population 0 within the requested distance of the chosen site (e.g. a small buffer around a point in an unpopulated area), a single-site report still renders, showing zero residents — supported by EJAM versions that include [Public-Environmental-Data-Partners/EJAM#468](https://github.com/Public-Environmental-Data-Partners/EJAM/pull/468) (merged after v3.2022.1). On older EJAM versions that cannot render a zero-population report, the endpoint returns a clear error page rather than a broken download. Either way, a larger `buffer` — or `sitenumber=0` for an overall multisite summary — gives a report covering actual residents.
 
@@ -108,7 +108,7 @@ df
 
 Two endpoints let an external app (e.g. EJScreen) hand a set of selected places to the full EJAM app without hitting URL-length limits (important for polygons):
 
-- `POST /handoff` — body may contain `sites` (array of `{lat,lon}`), `fips` (array of codes), `shape` (a GeoJSON `FeatureCollection`), and `radius`. Returns `{"token": "...", "expires": <epoch seconds>}`.
+- `POST /handoff` — body may contain `sites` (array of `{lat,lon}`), `fips` (array of codes), `shape` (a GeoJSON `FeatureCollection`), and `radius` (default if omitted: 0 for `fips`/`shape` handoffs, i.e. analyze inside the boundary itself; none for `sites` — the EJAM app applies its own point default). Returns `{"token": "...", "expires": <epoch seconds>}`.
 - `GET /handoff/<token>` — returns the stored payload as JSON.
 
 The caller opens the EJAM app at `https://ejam.publicenvirodata.org/?handoff=<token>`; the app fetches `GET /handoff/<token>` on startup and pre-loads those places.
