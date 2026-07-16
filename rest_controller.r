@@ -533,7 +533,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 #* @param sites Array of {lat, lon} site objects
 #* @param fips Array of FIPS codes (each one a separate site)
 #* @param shape A GeoJSON FeatureCollection of polygons
-#* @param radius Buffer radius in miles. Default if omitted: 0 for FIPS or SHP handoffs (analyze inside the boundary itself, no buffer); no default for latlon (the EJAM app applies its own point default).
+#* @param radius Buffer radius in miles. Default if omitted: 0 when the payload has fips or shape and no sites (analyze inside the boundary itself, no buffer); no default when sites are present (the EJAM app applies its own point default).
 #* @param buffer Synonym for radius.
 #* @post /handoff
 function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, buffer = NULL, res) {
@@ -551,10 +551,15 @@ function(method = NULL, sites = NULL, fips = NULL, shape = NULL, radius = NULL, 
   # leaving radius NULL: an absent field serializes as JSON {} in the GET
   # /handoff/<token> payload, which clients can misparse (a zero-length list,
   # not NULL, in R -- it crashed the EJAM app's launch handler; see
-  # Public-Environmental-Data-Partners/EJAM#465). Points get no default here:
-  # a bare point needs SOME positive buffer, and the EJAM app applies its own
-  # point-method default/minimum at the radius slider.
-  if (is.null(radius) && method %in% c("FIPS", "SHP")) {radius <- 0}
+  # Public-Environmental-Data-Partners/EJAM#465). Keyed on the payload CONTENT
+  # (fips/shape present, sites absent), not the method string: method is
+  # caller-provided and unvalidated, so e.g. {method:"latlon", fips:[...]} or a
+  # lowercase "fips" would dodge a method-based default -- and the EJAM app
+  # likewise dispatches on payload content, ignoring method. When sites are
+  # present they take precedence in the app (points), which applies its own
+  # point-method default/minimum at the radius slider, so no default is stored:
+  # a bare point needs SOME positive buffer, not 0.
+  if (is.null(radius) && is.null(sites) && (!is.null(fips) || !is.null(shape))) {radius <- 0}
   if (is.finite(.handoff_max_tokens) && length(ls(.handoff_store)) >= .handoff_max_tokens) {
     res$status <- 429
     return(handle_error(sprintf("Handoff token capacity reached (max %d active tokens). Retry after a short delay; tokens expire after 1 hour.", as.integer(.handoff_max_tokens))))
