@@ -240,14 +240,35 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
     res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
     return(res)
   }
+  # Per-site report links built from a multisite EJAM analysis submit only their
+  # own site but carry sitenumber=N, the row that site had in the ORIGINAL
+  # analysis (Public-Environmental-Data-Partners/EJAM#348 and EJAM#470). Report
+  # on the one submitted row, but label the header "Site N" instead of
+  # mislabeling every per-site report as "Site 1". The label pass-through needs
+  # an EJAM whose ejam2report() has sitenumber_label (added in EJAM#470); with an
+  # older pinned EJAM this falls back to today's behavior (a "Site 1" label), so
+  # the change is safe to deploy before the EJAM_VERSION pin advances.
+  sitenumber_label <- NULL
+  if (sitenum > 1 && NROW(result$results_bysite) == 1) {
+    if ("sitenumber_label" %in% names(formals(ejam2report))) {
+      sitenumber_label <- sitenum
+    }
+    sitenum <- 1  # matches ejam2report()'s own out-of-range fallback, now explicit
+  }
   # NOTE: no pre-render check here on purpose. A single-site report on a site
   # where the analysis found no residents (e.g. a small buffer in an
   # unpopulated area: /report?lat=33&lon=-112&buffer=1) is a legitimate
   # request: EJAM versions that include
   # Public-Environmental-Data-Partners/EJAM#468 (merged after v3.2022.1)
   # render a real report for it, so the API must let ejam2report() handle it.
-  report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
-    launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  if (is.null(sitenumber_label)) {
+    report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
+      launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  } else {
+    report_output <- ejam2report(result, sitenumber = sitenum, sitenumber_label = sitenumber_label,
+      return_html = (ext == "html"),
+      launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  }
 
   # Fail-safe: never ship a no-content result as a 200. When ejam2report()
   # cannot render (it returns a bare logical NA -- e.g. the zero-population
@@ -300,7 +321,7 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites.
+#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites. When only ONE site is submitted (as in the per-site report links EJAM builds from multisite results), N > 1 is used to label the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1".
 #* @param fileextension "html" or "pdf". Default if omitted: pdf for a single-site report (better page breaks when printing), html for a multisite report (sitenumber=0/overall) -- html is much faster to generate and its interactive map links each site to its own report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
@@ -390,7 +411,7 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param fips An array of FIPS codes (each one a separate site)
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
+#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites. When only ONE site is submitted, N > 1 is used to label the report header "Site N" (that site's row in the original analysis) instead of "Site 1" -- see GET /report.
 #* @param fileextension "html" or "pdf". Default if omitted: html for the (default) multisite report, pdf when a single sitenumber is chosen. See GET /report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
