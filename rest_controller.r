@@ -226,6 +226,25 @@ function(attribute = "pctunemployed", value=.9, res) {
 
 # /report ####
 
+# Normalize the sitenumber value shared by GET /report and POST /report.
+# Returns 0 for 0/"overall" (aggregate multisite report), a positive whole
+# number N (which site to report on -- and, for a one-site submission, the
+# "Site N" display label), the endpoint's default when omitted/empty, or NULL
+# when invalid -- the caller must then return a 400. Values such as 1.5, Inf,
+# -2, or "abc" are rejected rather than silently falling back, because N can
+# flow into the report header as a label: the contract is a positive whole
+# original-analysis row number.
+normalize_sitenumber <- function(sitenumber, default) {
+  if (length(sitenumber) > 1) sitenumber <- sitenumber[[1]]  # e.g. a repeated query param
+  if (is.null(sitenumber)) return(default)
+  chr <- trimws(as.character(sitenumber))
+  if (identical(chr, "")) return(default)
+  if (identical(tolower(chr), "overall")) return(0)
+  n <- suppressWarnings(as.numeric(chr))
+  if (length(n) != 1 || is.na(n) || !is.finite(n) || n < 0 || n != trunc(n)) return(NULL)
+  n
+}
+
 # Render an ejamit() result as an EJAM report and write it to the plumber
 # response as HTML or PDF. Shared by GET /report (one value per param) and
 # POST /report (JSON body; supports many/large polygons and mixed/large sets).
@@ -240,14 +259,35 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
     res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
     return(res)
   }
+  # Per-site report links built from a multisite EJAM analysis submit only their
+  # own site but carry sitenumber=N, the row that site had in the ORIGINAL
+  # analysis (Public-Environmental-Data-Partners/EJAM#348 and EJAM#470). Report
+  # on the one submitted row, but label the header "Site N" instead of
+  # mislabeling every per-site report as "Site 1". The label pass-through needs
+  # an EJAM whose ejam2report() has sitenumber_label (added in EJAM#470); with an
+  # older pinned EJAM this falls back to today's behavior (a "Site 1" label), so
+  # the change is safe to deploy before the EJAM_VERSION pin advances.
+  sitenumber_label <- NULL
+  if (sitenum > 1 && NROW(result$results_bysite) == 1) {
+    if ("sitenumber_label" %in% names(formals(ejam2report))) {
+      sitenumber_label <- sitenum
+    }
+    sitenum <- 1  # matches ejam2report()'s own out-of-range fallback, now explicit
+  }
   # NOTE: no pre-render check here on purpose. A single-site report on a site
   # where the analysis found no residents (e.g. a small buffer in an
   # unpopulated area: /report?lat=33&lon=-112&buffer=1) is a legitimate
   # request: EJAM versions that include
   # Public-Environmental-Data-Partners/EJAM#468 (merged after v3.2022.1)
   # render a real report for it, so the API must let ejam2report() handle it.
-  report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
-    launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  if (is.null(sitenumber_label)) {
+    report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
+      launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  } else {
+    report_output <- ejam2report(result, sitenumber = sitenum, sitenumber_label = sitenumber_label,
+      return_html = (ext == "html"),
+      launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
+  }
 
   # Fail-safe: never ship a no-content result as a 200. When ejam2report()
   # cannot render (it returns a bare logical NA -- e.g. the zero-population
@@ -300,7 +340,7 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites.
+#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites. When only ONE site is submitted (as in the per-site report links EJAM builds from multisite results), N > 1 is used to label the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1". (The "Site N" label requires an EJAM release whose ejam2report() has the sitenumber_label parameter -- EJAM#470; with an older pinned EJAM the report falls back to the default "Site 1" header.)
 #* @param fileextension "html" or "pdf". Default if omitted: pdf for a single-site report (better page breaks when printing), html for a multisite report (sitenumber=0/overall) -- html is much faster to generate and its interactive map links each site to its own report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
@@ -339,9 +379,13 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   }
 
   # Normalize sitenumber. 0 or "overall" -> aggregate multisite report
-  # (ejam2report renders results_overall); otherwise a single site.
-  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
-  if (is.na(sitenum)) sitenum <- 1
+  # (ejam2report renders results_overall); otherwise a single site N.
+  # Invalid values (1.5, Inf, -2, "abc", ...) are a 400, not a silent fallback,
+  # since N can become the "Site N" report-header label -- see normalize_sitenumber().
+  sitenum <- normalize_sitenumber(sitenumber, default = 1)
+  if (is.null(sitenum)) {
+    return(html_error(res, 400, "sitenumber must be a positive whole number, or 0 (or 'overall') for an aggregate multisite report."))
+  }
 
   # Default report format (when fileextension is not specified) mirrors the
   # EJAM package's report links (Public-Environmental-Data-Partners/EJAM#443):
@@ -390,7 +434,7 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param fips An array of FIPS codes (each one a separate site)
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites.
+#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites. When only ONE site is submitted, N > 1 is used to label the report header "Site N" (that site's row in the original analysis) instead of "Site 1" -- see GET /report, including the note that the label requires an EJAM release with ejam2report(sitenumber_label=) (EJAM#470); older pinned EJAM falls back to "Site 1".
 #* @param fileextension "html" or "pdf". Default if omitted: html for the (default) multisite report, pdf when a single sitenumber is chosen. See GET /report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
@@ -404,9 +448,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
   method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   area <- sites %||% shape %||% fips
 
-  # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site.
-  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
-  if (is.na(sitenum)) sitenum <- 0
+  # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site N.
+  # Invalid values are a 400, same as GET /report -- see normalize_sitenumber().
+  sitenum <- normalize_sitenumber(sitenumber, default = 0)
+  if (is.null(sitenum)) {
+    return(html_error(res, 400, "sitenumber must be a positive whole number, or 0 (or 'overall') for an aggregate multisite report."))
+  }
 
   # Default format mirrors GET /report (and Public-Environmental-Data-Partners/EJAM#443):
   # html for the multisite report (much faster to generate; interactive map
