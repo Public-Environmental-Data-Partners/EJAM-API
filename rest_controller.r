@@ -321,7 +321,7 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
 #* @param fips A FIPS code for a specific US Census geography
 #* @param buffer The buffer radius in miles
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites. When only ONE site is submitted (as in the per-site report links EJAM builds from multisite results), N > 1 is used to label the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1".
+#* @param sitenumber Which site to report on. Defaults to 1 (single-site). Use 0 (or "overall") for an aggregate MULTISITE report across all sites. When only ONE site is submitted (as in the per-site report links EJAM builds from multisite results), N > 1 is used to label the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1". (The "Site N" label requires an EJAM release whose ejam2report() has the sitenumber_label parameter -- EJAM#470; with an older pinned EJAM the report falls back to the default "Site 1" header.)
 #* @param fileextension "html" or "pdf". Default if omitted: pdf for a single-site report (better page breaks when printing), html for a multisite report (sitenumber=0/overall) -- html is much faster to generate and its interactive map links each site to its own report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @get /report
@@ -411,7 +411,7 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
 #* @param fips An array of FIPS codes (each one a separate site)
 #* @param buffer The buffer radius in miles (out from a polygon edge, or around a point)
 #* @param radius Synonym for buffer.
-#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites. When only ONE site is submitted, N > 1 is used to label the report header "Site N" (that site's row in the original analysis) instead of "Site 1" -- see GET /report.
+#* @param sitenumber Which site to report on. Defaults to 0 = aggregate MULTISITE report across all sites. When only ONE site is submitted, N > 1 is used to label the report header "Site N" (that site's row in the original analysis) instead of "Site 1" -- see GET /report, including the note that the label requires an EJAM release with ejam2report(sitenumber_label=) (EJAM#470); older pinned EJAM falls back to "Site 1".
 #* @param fileextension "html" or "pdf". Default if omitted: html for the (default) multisite report, pdf when a single sitenumber is chosen. See GET /report.
 #* @serializer contentType list(type = "application/octet-stream")
 #* @post /report
