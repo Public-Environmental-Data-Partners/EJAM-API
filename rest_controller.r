@@ -226,6 +226,25 @@ function(attribute = "pctunemployed", value=.9, res) {
 
 # /report ####
 
+# Normalize the sitenumber value shared by GET /report and POST /report.
+# Returns 0 for 0/"overall" (aggregate multisite report), a positive whole
+# number N (which site to report on -- and, for a one-site submission, the
+# "Site N" display label), the endpoint's default when omitted/empty, or NULL
+# when invalid -- the caller must then return a 400. Values such as 1.5, Inf,
+# -2, or "abc" are rejected rather than silently falling back, because N can
+# flow into the report header as a label: the contract is a positive whole
+# original-analysis row number.
+normalize_sitenumber <- function(sitenumber, default) {
+  if (length(sitenumber) > 1) sitenumber <- sitenumber[[1]]  # e.g. a repeated query param
+  if (is.null(sitenumber)) return(default)
+  chr <- trimws(as.character(sitenumber))
+  if (identical(chr, "")) return(default)
+  if (identical(tolower(chr), "overall")) return(0)
+  n <- suppressWarnings(as.numeric(chr))
+  if (length(n) != 1 || is.na(n) || !is.finite(n) || n < 0 || n != trunc(n)) return(NULL)
+  n
+}
+
 # Render an ejamit() result as an EJAM report and write it to the plumber
 # response as HTML or PDF. Shared by GET /report (one value per param) and
 # POST /report (JSON body; supports many/large polygons and mixed/large sets).
@@ -360,9 +379,13 @@ function(lat = NULL, lon = NULL, shape = NULL, fips = NULL, buffer = 3, radius =
   }
 
   # Normalize sitenumber. 0 or "overall" -> aggregate multisite report
-  # (ejam2report renders results_overall); otherwise a single site.
-  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
-  if (is.na(sitenum)) sitenum <- 1
+  # (ejam2report renders results_overall); otherwise a single site N.
+  # Invalid values (1.5, Inf, -2, "abc", ...) are a 400, not a silent fallback,
+  # since N can become the "Site N" report-header label -- see normalize_sitenumber().
+  sitenum <- normalize_sitenumber(sitenumber, default = 1)
+  if (is.null(sitenum)) {
+    return(html_error(res, 400, "sitenumber must be a positive whole number, or 0 (or 'overall') for an aggregate multisite report."))
+  }
 
   # Default report format (when fileextension is not specified) mirrors the
   # EJAM package's report links (Public-Environmental-Data-Partners/EJAM#443):
@@ -425,9 +448,12 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
   method <- if (!is.null(sites)) "latlon" else if (!is.null(shape)) "SHP" else "FIPS"
   area <- sites %||% shape %||% fips
 
-  # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site.
-  sitenum <- if (tolower(as.character(sitenumber)) %in% c("0", "overall")) 0 else suppressWarnings(as.numeric(sitenumber))
-  if (is.na(sitenum)) sitenum <- 0
+  # 0 or "overall" -> aggregate multisite report; otherwise the chosen single site N.
+  # Invalid values are a 400, same as GET /report -- see normalize_sitenumber().
+  sitenum <- normalize_sitenumber(sitenumber, default = 0)
+  if (is.null(sitenum)) {
+    return(html_error(res, 400, "sitenumber must be a positive whole number, or 0 (or 'overall') for an aggregate multisite report."))
+  }
 
   # Default format mirrors GET /report (and Public-Environmental-Data-Partners/EJAM#443):
   # html for the multisite report (much faster to generate; interactive map
