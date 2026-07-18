@@ -240,32 +240,29 @@ report_response <- function(result, method, to_map, sitenum, ext, res, cache_hea
     res$body <- handle_error("fileextension must be 'html' or 'pdf'.", "html")
     return(res)
   }
-  # A single-site report on a site where the analysis found no residents (e.g.
-  # a small buffer in an unpopulated area: /report?lat=33&lon=-112&buffer=1)
-  # does not render -- ejam2report() returns a bare NA that plumber would ship
-  # as a 1-byte "application/pdf" 200, an unopenable download that the edge
-  # cache would then serve for a day. Catch it up front and return a clear
-  # error page instead (error responses are no-store, so never cached).
-  if (sitenum > 0 && is.data.frame(result$results_bysite) && sitenum <= nrow(result$results_bysite)) {
-    siterow <- result$results_bysite[sitenum, ]
-    pop_i <- suppressWarnings(as.numeric(siterow$pop[1]))
-    no_residents <- isFALSE(as.logical(siterow$valid[1])) || (!is.na(pop_i) && pop_i <= 0)
-    if (no_residents) {
-      return(html_error(res, 400, paste0(
-        "No residents were found for this site (population is 0 within the requested distance), ",
-        "so a single-site report cannot be generated. Try a larger buffer/radius, ",
-        "or use sitenumber=0 for an overall multisite summary.")))
-    }
-  }
-
+  # NOTE: no pre-render check here on purpose. A single-site report on a site
+  # where the analysis found no residents (e.g. a small buffer in an
+  # unpopulated area: /report?lat=33&lon=-112&buffer=1) is a legitimate
+  # request: EJAM versions that include
+  # Public-Environmental-Data-Partners/EJAM#468 (merged after v3.2022.1)
+  # render a real report for it, so the API must let ejam2report() handle it.
   report_output <- ejam2report(result, sitenumber = sitenum, return_html = (ext == "html"),
     launch_browser = FALSE, site_method = method, shp = to_map, fileextension = ext)
 
-  # Belt-and-braces for any other path that yields no real report content
-  # (NULL, empty, or a bare logical NA): never ship an empty body as a 200.
+  # Fail-safe: never ship a no-content result as a 200. When ejam2report()
+  # cannot render (it returns a bare logical NA -- e.g. the zero-population
+  # single-site case on EJAM versions without EJAM#468), plumber would
+  # otherwise serialize that as a 1-byte "application/pdf" 200, an unopenable
+  # download that the edge cache then serves for a day. Return a clear,
+  # uncacheable (no-store) error page instead.
   if (is.null(report_output) || length(report_output) == 0 ||
       (length(report_output) == 1 && is.logical(report_output))) {
-    return(html_error(res, 500, "Report generation returned no content for this request."))
+    return(html_error(res, 500, paste0(
+      "Report generation returned no content for this request. ",
+      "This can happen when the analysis finds no residents at the chosen site ",
+      "(population 0 within the requested distance) and the EJAM version deployed here ",
+      "cannot yet render a zero-population report. ",
+      "Try a larger buffer/radius, or sitenumber=0 for an overall multisite summary.")))
   }
 
   # Successful reports are deterministic for a given URL + deployed data

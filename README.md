@@ -36,7 +36,7 @@ point, area (polygon), or FIPS geography.
 
 `report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles but can be explicitly set to 0. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
-A single-site report needs residents to report on: if the analysis finds population 0 within the requested distance of the chosen site (e.g. a small buffer around a point in an unpopulated area), the endpoint returns an error page explaining that, rather than a report. Use a larger `buffer`, or `sitenumber=0` for an overall multisite summary, instead.
+If the analysis finds population 0 within the requested distance of the chosen site (e.g. a small buffer around a point in an unpopulated area), a single-site report still renders, showing zero residents — supported by EJAM versions that include [Public-Environmental-Data-Partners/EJAM#468](https://github.com/Public-Environmental-Data-Partners/EJAM/pull/468) (merged after v3.2022.1). On older EJAM versions that cannot render a zero-population report, the endpoint returns a clear error page rather than a broken download. Either way, a larger `buffer` — or `sitenumber=0` for an overall multisite summary — gives a report covering actual residents.
 
 ### Examples
 A report on one county: https://api.ejanalysis.com/report?fips=10001
