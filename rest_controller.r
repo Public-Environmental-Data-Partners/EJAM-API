@@ -6,6 +6,8 @@ library(geojsonsf)
 library(jsonlite)
 library(sf)
 
+source("query_pagination.R", local = TRUE)
+
 ############################# #
 #* @apiTitle API for EJAM / EJSCREEN Data, Analysis, and Reports
 #*
@@ -209,19 +211,22 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, geo
 # /query ####
 
 #* Return EJAM analysis data as JSON based on attribute query
+#* Query responses are paginated. Use page and limit to request subsequent pages.
 #* @tag Data
 #* @param attribute An EJSCREEN attribute, in EJAM syntax (e.g. pctunemployed)
 #* @param value A decimal, 0-1, representing a cutoff/threshold; returns blockgroups whose percentile rank for the attribute is larger (e.g. pctunemployed > .9)
+#* @param page Positive whole-number page to return. Defaults to 1.
+#* @param limit Positive whole-number rows per page. Defaults to 100 and cannot exceed 500.
 #* @post /query
-function(attribute = "pctunemployed", value=.9, res) {
-  value <- suppressWarnings(as.numeric(value))
-  if (length(value) != 1 || is.na(value) || value < 0 || value > 1) {
-    res$status <- 400
-    return(handle_error("value must be a numeric cutoff from 0 to 1."))
-  }
-  these <- pctile_x_is_hit_by_score(attribute, cutoff = value)
-  results <- blockgroupstats[these,]
-  return (results)
+function(attribute = "pctunemployed", value = .9, page = 1, limit = QUERY_DEFAULT_LIMIT, res) {
+  query_endpoint_response(
+    attribute = attribute,
+    value = value,
+    page = page,
+    limit = limit,
+    res = res,
+    error_handler = handle_error
+  )
 }
 
 # /report ####

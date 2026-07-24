@@ -104,6 +104,39 @@ df = pandas.DataFrame.from_dict(response.json())
 df
 ```
 
+## Query
+`query` accepts POST requests with the following parameters:
+- `attribute` - an EJSCREEN attribute in EJAM syntax, such as `pctlowinc` or `pctunemployed`
+- `value` - a decimal cutoff from 0 to 1; numeric-like strings are coerced and invalid values are rejected
+- `page` - a positive whole-number page to return. Default = 1
+- `limit` - rows per page. Default = 100; maximum = 500
+
+`query` returns a JSON object with:
+- `results` - the EJAM output rows for the requested page
+- `pagination` - metadata with `page`, `limit`, `total_rows`, `total_pages`, `returned_rows`, `has_next_page`, and `has_previous_page`
+
+Pagination is 1-based. For example, with `limit = 100`, `page = 2` returns rows 101-200 from the query results. If `page` is beyond the available results, `results` is empty and `pagination` still reports the total row and page counts.
+
+### Examples
+```
+data = {"attribute": "pctlowinc", "value": 0.95, "page": 1, "limit": 100}
+
+# Execute query
+import requests
+import pandas
+url = "https://ejamapi-84652557241.us-central1.run.app/query"
+response = requests.post(url, json=data)
+
+# Load response as Pandas dataframe
+payload = response.json()
+df = pandas.DataFrame.from_dict(payload["results"])
+df
+
+# Request the next page
+data["page"] = payload["pagination"]["page"] + 1
+response = requests.post(url, json=data)
+```
+
 ## Handoff (launch the EJAM app pre-loaded)
 
 Two endpoints let an external app (e.g. EJScreen) hand a set of selected places to the full EJAM app without hitting URL-length limits (important for polygons):
