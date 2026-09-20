@@ -3,22 +3,22 @@
 # EJAM-API
 In February 2025, USEPA removed its EJSCREEN website from public access, including an API for querying EJSCREEN indices/indicators and Census data. One of the main features of the API was geographically-based inquiries. It could be used to, for instance, return EJSCREEN and Census metrics weighted based on the Census Blocks within a 3 mile buffer around a selected point. The API facilitated the creation of [community reports](https://www.sf.gov/sites/default/files/2024-03/EJScreen%20Community%20Report.pdf) based on those kinds of queries. 
 
-Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently provide an API; this repo contains files necessary to create a Docker image of EJAM and its dependencies as well as an API model.
+Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently bundle the exact API that is hosted; this repo contains files necessary to create a Docker image of EJAM and its dependencies, as well as an API model.
 
 # Model
-The API exposes report and data endpoints, plus a token-based handoff for launching the [EJAM app](https://ejanalysis.org/ejamapp) pre-loaded with sites already specified as parameters.
+[The API](https://api.ejanalysis.com) exposes `report` and `data` endpoints, plus a token-based `handoff` for launching the [EJAM app](https://ejanalysis.com/ejamapp) pre-loaded with sites already specified as parameters.
 
 ## Base URLs
 The canonical base URL is the Cloud Run service:
-`https://ejamapi-84652557241.us-central1.run.app`
+[https://ejamapi-84652557241.us-central1.run.app](https://ejamapi-84652557241.us-central1.run.app)
 
 A friendlier base URL is also available now and proxies the **same** API through Cloudflare (with permissive CORS for browser apps):
-`https://api.ejanalysis.com` (and the alias `https://ejamapi.ejanalysis.com`)
+https://api.ejanalysis.com (and the alias `https://ejamapi.ejanalysis.com`)
 
-All of the example URLs below work with either base. For example, `https://api.ejanalysis.com/report?fips=10001` is equivalent to using the Cloud Run URL.
-The [EJAM R package](https://ejanalysis.org/ejamdocs) reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION` file, so it can point at either base; see `?url_package` and [url_ejamapi](https://public-environmental-data-partners.github.io/EJAM/reference/url_ejamapi.html) in EJAM.
+All of the example URLs below work with either base. For example, https://api.ejanalysis.com/report?fips=10001 is equivalent to using the Cloud Run URL.
+The [EJAM R package](https://ejanalysis.org/ejamdocs) reads its API base from one place, the `ejam_api_url` field in its `DESCRIPTION` file, so it can point at either base; see [url_package](https://public-environmental-data-partners.github.io/EJAM/reference/url_package.html) and [url_ejamapi](https://public-environmental-data-partners.github.io/EJAM/reference/url_ejamapi.html) in EJAM.
 
-Visiting a base URL with no path (e.g. `https://api.ejanalysis.com/`) redirects to this repo's interactive API documentation page (`/__docs__/`).
+Visiting a base URL with no path (e.g. https://api.ejanalysis.com/) redirects to this repo's interactive API documentation page (`/__docs__/`).
 
 ## Reports
 
