@@ -1,3 +1,6 @@
+# Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
+FROM --platform=linux/amd64 ubuntu:22.04
+
 # EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
 
 ARG EJAM_VERSION=v3.2022.3
@@ -13,9 +16,6 @@ ARG EJAM_VERSION=v3.2022.3
 # A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
 # Record the version in the image so the running API can report which EJAM it was built with.
 ENV EJAM_VERSION=${EJAM_VERSION}
-
-# Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
-FROM --platform=linux/amd64 ubuntu:22.04
 
 # Set DEBIAN_FRONTEND to noninteractive to avoid prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
