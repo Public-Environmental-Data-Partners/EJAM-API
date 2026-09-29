@@ -1,4 +1,18 @@
-# Written with assistance from Google Gemini
+# EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
+
+ARG EJAM_VERSION=v3.2022.3
+
+# That ARG can be overriden at build time without editing this file, e.g.:
+
+#   docker build --build-arg EJAM_VERSION=v3.2022.3 .
+#   docker build --build-arg EJAM_VERSION=v4.2024.0 .
+
+# A branch name also works (no leading "v"), e.g. EJAM_VERSION=development -- but a branch
+# moves while the "git clone" RUN layer below is cached, so a plain rebuild may reuse an old
+# clone of that branch; force a fresh pull of the current tip with "docker build --no-cache".
+# A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
+# Record the version in the image so the running API can report which EJAM it was built with.
+ENV EJAM_VERSION=${EJAM_VERSION}
 
 # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
 FROM --platform=linux/amd64 ubuntu:22.04
@@ -44,19 +58,6 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
     chmod +x /usr/local/bin/google-chrome && \
     echo 'CHROMOTE_CHROME=/usr/local/bin/google-chrome' >> /etc/R/Renviron.site && \
     echo 'CHROMOTE_HOST=127.0.0.1' >> /etc/R/Renviron.site
-
-# EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
-# Override at build time without editing this file, e.g.:
-#   docker build --build-arg EJAM_VERSION=v3.2022.3 .
-#   docker build --build-arg EJAM_VERSION=v3.2023.0 .
-#   docker build --build-arg EJAM_VERSION=v3.2024.0 .
-# A branch name also works (no leading "v"), e.g. EJAM_VERSION=development -- but a branch
-# moves while the "git clone" RUN layer below is cached, so a plain rebuild may reuse an old
-# clone of that branch; force a fresh pull of the current tip with "docker build --no-cache".
-# A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
-ARG EJAM_VERSION=v3.2022.3
-# Record the version in the image so the running API can report which EJAM it was built with.
-ENV EJAM_VERSION=${EJAM_VERSION}
 
 # Clone EJAM into a fixed scratch dir (its name is arbitrary; it is deleted from the container filesystem after install).
 RUN git clone --branch "${EJAM_VERSION}" --depth 1 https://github.com/Public-Environmental-Data-Partners/EJAM.git /EJAM_src && \
@@ -119,3 +120,5 @@ ENV DEBIAN_FRONTEND=dialog
 COPY / /
 EXPOSE 8080
 ENTRYPOINT ["Rscript", "main.r"]
+
+# Written with assistance from Google Gemini and Claude
