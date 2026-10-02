@@ -1,3 +1,5 @@
+# Written with assistance from Google Gemini and Anthropic's Claude
+
 # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
 FROM --platform=linux/amd64 ubuntu:22.04
 
