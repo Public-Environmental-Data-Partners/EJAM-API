@@ -1,0 +1,8 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/canada-edj/ejamapi:v3.2022.3', '.']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+images:
+  - 'gcr.io/canada-edj/ejamapi:v3.2022.3'
