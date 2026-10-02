@@ -1,4 +1,4 @@
-# Written with assistance from Google Gemini
+# Written with assistance from Google Gemini and Anthropic's Claude
 
 # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
 FROM --platform=linux/amd64 ubuntu:22.04
@@ -46,15 +46,18 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
     echo 'CHROMOTE_HOST=127.0.0.1' >> /etc/R/Renviron.site
 
 # EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
-# Override at build time without editing this file, e.g.:
-#   docker build --build-arg EJAM_VERSION=v3.2022.2 .
-#   docker build --build-arg EJAM_VERSION=v3.2023.0 .
-#   docker build --build-arg EJAM_VERSION=v3.2024.0 .
+
+ARG EJAM_VERSION=v3.2022.3
+
+# That ARG can be overriden at build time without editing this file, e.g.:
+
+#   docker build --build-arg EJAM_VERSION=v3.2022.3 .
+#   docker build --build-arg EJAM_VERSION=v4.2024.0 .
+
 # A branch name also works (no leading "v"), e.g. EJAM_VERSION=development -- but a branch
 # moves while the "git clone" RUN layer below is cached, so a plain rebuild may reuse an old
 # clone of that branch; force a fresh pull of the current tip with "docker build --no-cache".
 # A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
-ARG EJAM_VERSION=v3.2022.2
 # Record the version in the image so the running API can report which EJAM it was built with.
 ENV EJAM_VERSION=${EJAM_VERSION}
 
@@ -119,3 +122,5 @@ ENV DEBIAN_FRONTEND=dialog
 COPY / /
 EXPOSE 8080
 ENTRYPOINT ["Rscript", "main.r"]
+
+# Written with assistance from Google Gemini and Claude
