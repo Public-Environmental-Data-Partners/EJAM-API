@@ -99,6 +99,7 @@ test_that("data aliases reach ejamit and FIPS stays a separate geography", {
   for (alias in c("zip", "zipcode")) {
     output <- do.call(post_data, c(setNames(list(list(10605, 1001)), alias), list(res = new_response())))
     expect_identical(output$code, c("10605", "01001"))
+    expect_identical(output$zipcode, output$code)
   }
   get_report(fips = "10001", res = new_response())
   expect_identical(api$rendered$site_method, "FIPS")
@@ -118,6 +119,7 @@ test_that("ZIP geometry output uses the codes actually analyzed, in result order
   api$shapes_from_zip <- function(zipcode) data.frame(zip = zipcode)
   output <- post_data(zip = "01001,99999,10605", geometries = TRUE, res = new_response())
   expect_identical(output$zip, output$code)
+  expect_identical(output$zipcode, output$code)
   expect_equal(nrow(output), 2)
 })
 
