@@ -82,7 +82,7 @@ input feature is implemented (EJAM#486).
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site. When only one site is supplied, N > 1 labels the header "Site N" (that site's row in the original analysis) instead of "Site 1", same as GET (and with the same EJAM-version condition noted above).
 - `fileextension` - `html` or `pdf`; default if omitted: `html` for the (default) multisite report, `pdf` when a single `sitenumber` is chosen.
 
-Each `fips` code or matched ZIP/ZCTA is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
+Each `fips` code or matched ZIP/ZCTA is a separate site. For multi-ZIP requests, `sitenumber` indexes the matched ZCTAs after missing ZIPs are dropped; an index beyond that count returns HTTP 400. A one-ZIP per-site link may still carry its original row number as the header label. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
 
 ```
 # A multisite report over several drawn polygons
@@ -103,6 +103,8 @@ The `data` endpoint returns a JSON object of EJAM output for a given point, area
 - `fips` - A FIPS code for a specific US Census geography (e.g. 10001, Kent County, Delaware), never a ZIP code
 - `scale` - For FIPS requests, the unit of at which to return results (county or blockgroup)
 - `geometries` - A boolean to indicate whether to return a geometry field for each analyzed unit. Default = FALSE
+
+ZIP data rows include a normalized `zipcode` column identifying the ZIP actually analyzed, including when some requested postal ZIPs have no ZCTA.
 
 `data` expects either `sites` OR `shape` OR `fips` OR `zip`/`zipcode`.
 A JSON object of EJAM output is returned.

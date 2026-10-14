@@ -95,6 +95,28 @@ test_that("ZIP validation failures return HTTP 400 before analysis for all route
   }
 })
 
+test_that("multi-ZIP report selection cannot fall back after ZCTAs are dropped", {
+  api$ejamit <- function(zipcode = NULL, fips = NULL, radius, ...) {
+    codes <- if (is.null(zipcode)) fips else zipcode
+    codes <- codes[codes != "99999"]
+    list(zipcode = if (is.null(zipcode)) NULL else codes, fips = fips,
+         radius = radius, results_bysite = data.frame(code = codes))
+  }
+  for (route in list(get_report, post_report)) {
+    res <- new_response()
+    route(zip = c("20912", "99999"), sitenumber = 2, res = res)
+    expect_equal(res$status, 400)
+    expect_match(res$body, "matched ZIPs")
+    res <- new_response()
+    route(zip = c("20912", "10605"), sitenumber = 3, res = res)
+    expect_equal(res$status, 400)
+    res <- new_response()
+    route(zip = "10605", sitenumber = 2, fileextension = "html", res = res)
+    expect_equal(res$status, 200)
+    expect_identical(api$rendered$result$zipcode, "10605")
+  }
+})
+
 test_that("data aliases reach ejamit and FIPS stays a separate geography", {
   for (alias in c("zip", "zipcode")) {
     output <- do.call(post_data, c(setNames(list(list(10605, 1001)), alias), list(res = new_response())))
