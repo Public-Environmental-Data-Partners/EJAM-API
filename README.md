@@ -1,7 +1,7 @@
  [![Code of Conduct](https://img.shields.io/badge/%E2%9D%A4-code%20of%20conduct-blue.svg?style=flat)](https://github.com/edgi-govdata-archiving/overview/blob/main/CONDUCT.md)
 
 # EJAM-API
-In February 2025, USEPA removed its EJSCREEN website from public access, including an API for querying EJSCREEN indices/indicators and Census data. One of the main features of the API was geographically-based inquiries. It could be used to, for instance, return EJSCREEN and Census metrics weighted based on the Census Blocks within a 3 mile buffer around a selected point. The API facilitated the creation of [community reports](https://www.sf.gov/sites/default/files/2024-03/EJScreen%20Community%20Report.pdf) based on those kinds of queries. 
+In February 2025, USEPA removed its EJSCREEN website from public access, including an API for querying EJSCREEN indices/indicators and Census data. One of the main features of the API was geographically-based inquiries. It could be used to, for instance, return EJSCREEN and Census metrics weighted based on the Census Blocks within a 3 mile buffer around a selected point. The API facilitated the creation of [community reports](https://www.sf.gov/sites/default/files/2024-03/EJScreen%20Community%20Report.pdf) based on those kinds of queries.
 
 Recreating that API would require extensive reverse engineering of the ArcGIS map server(s) that hosted the API functionality. Instead, our approach is to draw on [EJAM](https://github.com/ejanalysis/EJAM), the non-EPA version of an open-source R package that provides EJSCREEN's "multisite" reporting feature. EJAM was designed to produce EJSCREEN-style community reports, including single-site reports and multisite reports (summaries over multiple locations). The EJAM package itself does not currently bundle the exact API that is hosted; this repo contains files necessary to create a Docker image of EJAM and its dependencies, as well as an API model.
 
@@ -28,13 +28,14 @@ point, area (polygon), or FIPS geography.
 `report` accepts GET requests with the following parameters:
 - `lat` - the latitude of a given point, or comma-separated list like lat=33,32.5
 - `lon` - the longitude
+- `zip` (or `zipcode`) - one or more ZIP codes, as a comma-separated string or JSON array. ZIPs are analyzed using Census ZIP Code Tabulation Area (ZCTA) boundaries; the default buffer is 0. Provide only one alias, and do not combine it with coordinates, `sites`, `shape`, or `fips`. Leading zeroes are restored for numeric input, ZIP+4 is reduced to five digits, and duplicates are removed. Some postal ZIPs have no ZCTA; EJAM warns and drops them, and requests with no matching ZCTAs return an error. The first boundary download can be slow; subsequent calls use the local tigris cache.
 - `fips` - A FIPS code for a specific US Census geography, like fips=10 for one state, or comma-separated list like fips=10001,10003,10005 for 3 counties
 - `shape` - a GeoJSON text-encoded object describing an area of interest, such as a polygon of neighborhood boundaries
 - `buffer` (or `radius`, a synonym) - radius, in miles, around a point or out from the edge of a polygon to extend the search. Default if omitted: 3 for `lat`/`lon` points; 0 for `fips` or `shape` (analyze inside the boundary itself, no buffer). *Note: adding buffers around fips units may not be implemented yet.
 - `sitenumber` - which site to report on when more than one is supplied. Default = 1 (a single-site report on the first site). Use `sitenumber=0` (or `sitenumber=overall`) to get an aggregate **multisite report** that summarizes all of the supplied sites together. Each comma-separated `fips` code is treated as a separate site (no expansion), so `fips=10001,10003&sitenumber=0` reports on those two counties together. When only **one** site is supplied (as in the per-site report links EJAM builds from multisite results), `sitenumber=N` with N > 1 labels the report header "Site N" -- that site's row in the original analysis -- instead of "Site 1". (The "Site N" label requires the deployed `EJAM_VERSION` to include `ejam2report(sitenumber_label=)` from Public-Environmental-Data-Partners/EJAM#470; with an older pinned EJAM the report falls back to the default "Site 1" header.)
 - `fileextension` - `html` or `pdf`. Default if omitted: `pdf` for a single-site report (better page breaks when printing), `html` for a multisite report (`sitenumber=0`/`overall`) -- HTML is generated much faster, and its interactive map lets you click any site's point to open that site's own report.
 
-`report` expects either `lat`/`lon` OR `shape` OR `fips`. The default buffer around a point is 3 miles; for `fips` or `shape` the default buffer is 0 (the boundary itself). Either can be set explicitly. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
+`report` expects either `lat`/`lon` OR `shape` OR `fips` OR `zip`/`zipcode`. The default buffer around a point is 3 miles; for `fips` or `shape` the default buffer is 0 (the boundary itself). Either can be set explicitly. If `fileextension` is omitted, a single-site report is returned as PDF and a multisite report as HTML; pass `fileextension` explicitly to override.
 
 If the analysis finds population 0 within the requested distance of the chosen site (e.g. a small buffer around a point in an unpopulated area), a single-site report still renders, showing zero residents — supported by EJAM versions that include [Public-Environmental-Data-Partners/EJAM#468](https://github.com/Public-Environmental-Data-Partners/EJAM/pull/468) (merged after v3.2022.1). On older EJAM versions that cannot render a zero-population report, the endpoint returns a clear error page rather than a broken download. Either way, a larger `buffer` — or `sitenumber=0` for an overall multisite summary — gives a report covering actual residents.
 
@@ -49,13 +50,39 @@ A multisite report over two counties, as html: https://ejamapi-84652557241.us-ce
 
 A rectangular area of interest in Phoenix, with no buffer: https://ejamapi-84652557241.us-central1.run.app/report?shape=%7B"type"%3A"FeatureCollection"%2C"features"%3A%5B%7B"type"%3A"Feature"%2C"properties"%3A%7B%7D%2C"geometry"%3A%7B"coordinates"%3A%5B%5B%5B-112.01991856401462%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.47010908826502%5D%2C%5B-111.95488826248605%2C33.51124624304089%5D%2C%5B-112.01991856401462%2C33.51124624304089%5D%5D%5D%2C"type"%3A"Polygon"%7D%7D%5D%7D&buffer=0
 
+### ZIP/ZCTA reports
+
+**ZIP codes are not FIPS codes.** `zip=10001` means the Manhattan ZIP/ZCTA;
+`fips=10001` means Kent County, Delaware. Use the explicit ZIP parameter.
+
+After deployment of this feature:
+
+- One ZIP, PDF by default: `https://api.ejanalysis.com/report?zip=10605`
+- Two ZIPs, aggregate HTML: `https://api.ejanalysis.com/report?zipcode=10012,10506&sitenumber=0`
+- The second ZIP's report: `https://api.ejanalysis.com/report?zip=10012,10506&sitenumber=2`
+
+```python
+requests.post("https://api.ejanalysis.com/report", json={
+    "zip": ["10012", "10506"], "sitenumber": 0, "fileextension": "html"
+})
+requests.post("https://api.ejanalysis.com/data", json={
+    "zipcode": ["10012", "10506"], "buffer": 0, "geometries": True
+})
+```
+
+This feature requires an installed EJAM with `ejamit(zipcode=)` (v3.2022.3
+or later). Reports retain ZIP wording and map ZCTA boundaries. `scale` is a
+FIPS-only option; it does not expand ZIPs into counties or blockgroups.
+`/handoff` remains limited to its existing location types until the Shiny ZIP
+input feature is implemented (EJAM#486).
+
 ### Multisite report via POST
 
-`report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, or `fips` per request, plus:
+`report` also accepts **POST** requests, for multisite reports over **many or large polygons** (or large site sets) that would not fit in a GET URL. It uses the same report engine and accepts `sites`, `shape`, `fips`, `zip`/`zipcode`, and `buffer` (like `data`, but `scale` is not used for reports -- each FIPS is reported as its own site). Provide exactly one of `sites`, `shape`, `fips`, or `zip`/`zipcode` per request, plus:
 - `sitenumber` - default `0` = aggregate **multisite report**; a positive integer reports on that one site. When only one site is supplied, N > 1 labels the header "Site N" (that site's row in the original analysis) instead of "Site 1", same as GET (and with the same EJAM-version condition noted above).
 - `fileextension` - `html` or `pdf`; default if omitted: `html` for the (default) multisite report, `pdf` when a single `sitenumber` is chosen.
 
-Each `fips` code is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
+Each `fips` code or matched ZIP/ZCTA is a separate site. `shape` is a GeoJSON FeatureCollection string (one or more polygons). Returns the rendered report (HTML or PDF), same as GET `/report`.
 
 ```
 # A multisite report over several drawn polygons
@@ -72,11 +99,12 @@ The `data` endpoint returns a JSON object of EJAM output for a given point, area
 - `sites` - a list of lat/lon pairs e.g. `[{"lat":33, "lon":-112}, {"lat":34, "lon":-114}]`
 - `shape` - a GeoJSON object describing an area of interest, such as a polygon of neighborhood boundaries
 - `buffer` - radius, in miles, around the center of a point or out from the edge of a polygon to extend the search. Default = 0
-- `fips` - A FIPS code for a specific US Census geography (e.g. 10001)
+- `zip` (or `zipcode`) - ZIP/ZCTA codes, as a comma-separated string or array; same normalization and location exclusivity as `/report`. With `geometries=true`, returned boundaries match the ZIPs actually analyzed, in result order.
+- `fips` - A FIPS code for a specific US Census geography (e.g. 10001, Kent County, Delaware), never a ZIP code
 - `scale` - For FIPS requests, the unit of at which to return results (county or blockgroup)
 - `geometries` - A boolean to indicate whether to return a geometry field for each analyzed unit. Default = FALSE
 
-`data` expects either `sites` OR `shape` OR `fips`. 
+`data` expects either `sites` OR `shape` OR `fips` OR `zip`/`zipcode`.
 A JSON object of EJAM output is returned.
 
 ### Examples
@@ -154,8 +182,8 @@ All routes send `Access-Control-Allow-Origin: *` and answer `OPTIONS` preflight 
 
 ## Assets
 
-An assets endpoint returns a file from a pre-defined set of assets. The endpoint is structured as `/assets/<asset_name>`, 
-where `<asset_name>` is the name of the asset file. 
+An assets endpoint returns a file from a pre-defined set of assets. The endpoint is structured as `/assets/<asset_name>`,
+where `<asset_name>` is the name of the asset file.
 For example, to retrieve a specific asset, you would make a GET request to `/assets/example_asset.pdf`.
 
 # Set-up
