@@ -1,0 +1,21 @@
+name: ZIP API contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  zip-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+      - name: Install system dependency for fs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev
+      - name: Install test dependencies
+        run: Rscript --vanilla -e 'install.packages(c("testthat", "data.table"), repos = "https://cloud.r-project.org"); stopifnot(requireNamespace("testthat", quietly = TRUE), requireNamespace("data.table", quietly = TRUE))'
+      - name: Test ZIP routes and existing query pagination
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("tests/test-zip-api.R", stop_on_failure = TRUE)'
+          Rscript --vanilla -e 'source("tests/test-query-pagination.R")'
