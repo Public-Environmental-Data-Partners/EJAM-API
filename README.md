@@ -62,6 +62,8 @@ After deployment of this feature:
 - The second ZIP's report: `https://api.ejanalysis.com/report?zip=10012,10506&sitenumber=2`
 
 ```python
+import requests
+
 requests.post("https://api.ejanalysis.com/report", json={
     "zip": ["10012", "10506"], "sitenumber": 0, "fileextension": "html"
 })
