@@ -1,4 +1,4 @@
-# Written with assistance from Google Gemini
+# Written with assistance from Google Gemini and Anthropic's Claude
 
 # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
 FROM --platform=linux/amd64 ubuntu:22.04
@@ -119,3 +119,5 @@ ENV DEBIAN_FRONTEND=dialog
 COPY / /
 EXPOSE 8080
 ENTRYPOINT ["Rscript", "main.r"]
+
+# Written with assistance from Google Gemini and Claude
