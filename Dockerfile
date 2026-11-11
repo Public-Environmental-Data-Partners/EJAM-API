@@ -6,10 +6,17 @@ FROM --platform=linux/amd64 ubuntu:22.04
 # Set DEBIAN_FRONTEND to noninteractive to avoid prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Time zone for dates the API prints, e.g. "Report created on <date>" in report
+# footers. Cloud Run runs on UTC, so without this a report made after 7 pm
+# Eastern shows tomorrow's date. Los Angeles matches the EJAM app's fallback
+# (it uses the user's browser time zone, else America/Los_Angeles), so every
+# mainland US user sees today's date until midnight in Los Angeles.
+ENV TZ=America/Los_Angeles
+
 # Install System Dependencies, Pandoc, Git LFS, and Google Chrome
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    software-properties-common wget unzip gnupg ca-certificates locales \
+    software-properties-common wget unzip gnupg ca-certificates locales tzdata \
     pandoc git git-lfs \
     libudunits2-dev libmysqlclient-dev libcurl4-openssl-dev libsodium-dev \
     libgdal-dev libgeos-dev libproj-dev libssl-dev libxml2-dev zlib1g-dev \
