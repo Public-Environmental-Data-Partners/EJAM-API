@@ -6,10 +6,17 @@ FROM --platform=linux/amd64 ubuntu:22.04
 # Set DEBIAN_FRONTEND to noninteractive to avoid prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Time zone for dates the API prints, e.g. "Report created on <date>" in report
+# footers. Cloud Run runs on UTC, so without this a report made after 7 pm
+# Eastern shows tomorrow's date. Los Angeles matches the EJAM app's fallback
+# (it uses the user's browser time zone, else America/Los_Angeles), so every
+# mainland US user sees today's date until midnight in Los Angeles.
+ENV TZ=America/Los_Angeles
+
 # Install System Dependencies, Pandoc, Git LFS, and Google Chrome
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    software-properties-common wget unzip gnupg ca-certificates locales \
+    software-properties-common wget unzip gnupg ca-certificates locales tzdata \
     pandoc git git-lfs \
     libudunits2-dev libmysqlclient-dev libcurl4-openssl-dev libsodium-dev \
     libgdal-dev libgeos-dev libproj-dev libssl-dev libxml2-dev zlib1g-dev \
@@ -46,18 +53,15 @@ RUN echo '#!/bin/bash\nexec /usr/bin/google-chrome-stable --no-sandbox --disable
     echo 'CHROMOTE_HOST=127.0.0.1' >> /etc/R/Renviron.site
 
 # EJAM version: this ARG is the ONE place that sets which tagged EJAM release is installed.
-
-ARG EJAM_VERSION=v3.2022.3
-
-# That ARG can be overriden at build time without editing this file, e.g.:
-
-#   docker build --build-arg EJAM_VERSION=v3.2022.3 .
+# Override at build time without editing this file, e.g.:
+#   docker build --build-arg EJAM_VERSION=v3.2022.2 .
+#   docker build --build-arg EJAM_VERSION=v3.2023.0 .
 #   docker build --build-arg EJAM_VERSION=v4.2024.0 .
-
 # A branch name also works (no leading "v"), e.g. EJAM_VERSION=development -- but a branch
 # moves while the "git clone" RUN layer below is cached, so a plain rebuild may reuse an old
 # clone of that branch; force a fresh pull of the current tip with "docker build --no-cache".
 # A CI build can supply it from a repo variable (see README "Choosing the EJAM version").
+ARG EJAM_VERSION=v4.2024.0
 # Record the version in the image so the running API can report which EJAM it was built with.
 ENV EJAM_VERSION=${EJAM_VERSION}
 
