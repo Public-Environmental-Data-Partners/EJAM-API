@@ -26,4 +26,11 @@ r <- plumber::pr_set_api_spec(r, function(spec) {
   spec
 })
 
+# Build two throwaway reports before accepting requests, so the first real
+# report is as fast as later ones (EJAM#771). Never stops the API from starting.
+tryCatch({
+  source("warmup.R")
+  warmup_reports()
+}, error = function(e) message("EJAM warm-up: skipped after error: ", conditionMessage(e)))
+
 r$run(port=8080, host="0.0.0.0")

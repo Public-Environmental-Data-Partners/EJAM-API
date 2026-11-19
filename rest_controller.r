@@ -701,6 +701,15 @@ function(token, res) {
 # ~ ####
 # / Docs GET ####
 
+#* Wake the API. Answers at once and does no work. Apps (the EJAM app on Start, EJSCREEN when a Reports tool is picked) call it so a stopped API starts before a report is requested. On a new container the answer comes after the start-up warm-up.
+#* @tag Docs
+#* @serializer unboxedJSON
+#* @get /warmup
+function(res) {
+  res$setHeader("Cache-Control", "no-store")
+  list(status = "ok")
+}
+
 #* Redirect the API root to the interactive documentation page, so visiting the base URL (no endpoint or parameters) shows the Swagger UI.
 #* @tag Docs
 #* @get /
