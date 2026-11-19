@@ -96,18 +96,28 @@ fipper <- function(area, scale = "blockgroup") {
     }
   )
 
+  # No scale (the /data default): analyze each FIPS area as given, one row per
+  # area, as /report does. Without this, scale = NULL reached `if (fips_type ==
+  # scale)` and R stopped with "argument is of length zero" (EJAM#764).
+  if (is.null(scale) || length(scale) == 0 || is.na(scale[1]) || !nzchar(trimws(scale[1]))) {
+    return(fips_area)
+  }
+  scale <- tolower(trimws(as.character(scale[1])))
+  if (!(scale %in% c("blockgroup", "county"))) {
+    stop('scale must be "blockgroup" or "county", or left out to analyze each FIPS area as given.')
+  }
+
   # Determine the type of the provided FIPS code.
   fips_type <- fipstype(fips_area)[1]
 
-  if (fips_type == scale) {
+  if (isTRUE(fips_type == scale)) {
     return(fips_area)
   }
 
   # Convert the FIPS code to the desired scale.
   switch(scale,
          "county" = fips_counties_from_statefips(fips_area),
-         "blockgroup" = fips_bgs_in_fips(fips_area),
-         fips_area # Default to returning the original FIPS if the scale is not recognized.
+         "blockgroup" = fips_bgs_in_fips(fips_area)
   )
 }
 
@@ -491,7 +501,7 @@ function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, sit
 #* @param buffer The buffer radius in miles
 #* @param radius Synonym for buffer.
 #* @param geometries A boolean to indicate whether to include geometries in the output
-#* @param scale The Census geography at which to return results (blockgroup or county)
+#* @param scale Optional, used only with fips. Leave out to get one row per FIPS area as given. "county" returns one row per county in a state FIPS; "blockgroup" returns one row per block group in the area (can be very many rows).
 #* @post /data
 function(sites = NULL, shape = NULL, fips = NULL, buffer = 0, radius = NULL, geometries = FALSE, scale = NULL, res, zip = NULL, zipcode = NULL) {
   if (!is.null(radius)) {buffer <- radius}  # radius is a synonym (alias) for buffer
